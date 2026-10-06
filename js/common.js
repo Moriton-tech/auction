@@ -22,7 +22,7 @@ export const fmtDay = v => {
 
 export const statusMn = s => ({ pending: 'Хүлээгдэж байна', confirmed: 'Баталгаажсан', cancelled: 'Цуцлагдсан' }[s] || s);
 
-export const LOGO = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-4 2-7 5-8l2-5 3-3 2 1-1 3 4 3-1 2-3-1-1 3c2 1 3 3 3 5"/><path d="M9 20v-4M15 20v-5"/></svg>';
+export const LOGO = '<span class="brand-mark"></span>';
 
 // Хуудасны хаягууд (GitHub Pages дэд замтай ч ажиллана)
 export const url = {
