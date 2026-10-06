@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/brand.css">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -51,7 +52,6 @@ import { listStallions, friendlyError } from './js/db.js';
 import { esc, priceText, renderChrome, meterHtml, url, img } from './js/common.js';
 
 const cfg = await renderChrome('home');
-document.getElementById('hero-title').textContent = cfg.siteTagline || 'Үржүүлгийн азарганд гүү тавих захиалга';
 document.getElementById('hero-text').innerHTML = `Дэлхийн шилдэг удмын цэвэр англи, цэвэр араб, англо-араб азаргануудаас сонгож гүүгээ бүртгүүлээрэй. Азарга бүр <b>${cfg.defaultCapacity || 10} гүү</b> хүлээн авна — баталгаажсан дарааллаар ${esc(cfg.season || 'хавар')} гүүг азарганд тавина.`;
 
 let all = [];
