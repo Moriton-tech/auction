@@ -32,8 +32,8 @@ function need() {
 }
 
 const DEFAULT_SETTINGS = {
-  siteName: 'Морьтон Үржүүлэг',
-  siteTagline: 'Үржүүлгийн азарганд гүү тавих захиалга',
+  siteName: 'Морьтон',
+  siteTagline: 'Адуу үржүүлгийн ферм',
   orgName: 'Морьтон Групп — Үржүүлгийн алба',
   phone: '7000-0000',
   address: 'Хүй 7, Төв аймаг',
