@@ -20,8 +20,8 @@
 <div class="modal-bg" id="modal-bg"><div class="modal" id="modal"></div></div>
 
 <script type="module">
-import { onAdmin, login, logout, adminOverview, listBookings, confirmBooking, cancelBooking, reopenBooking, updateStallion, importSeed, getSettings, saveSettings, friendlyError, toDate } from './js/db.js';
-import { esc, priceText, fmtDate, statusMn, renderChrome, meterHtml, toast, url, img } from './js/common.js';
+import { onAdmin, login, logout, adminOverview, listBookings, confirmBooking, cancelBooking, reopenBooking, updateStallion, importSeed, getSettings, saveSettings, friendlyError, toDate, adminMaintenance, notifyNewBooking, effectivePrice } from './js/db.js';
+import { esc, priceHtml, fmtDate, statusMn, renderChrome, meterHtml, toast, url, img } from './js/common.js';
 
 await renderChrome();
 const root = document.getElementById('content');
@@ -57,6 +57,8 @@ onAdmin(async u => {
 });
 
 async function init() {
+  try { const m = await adminMaintenance(); if (m.expired) toast(`${m.expired} захиалгын 24 цагийн хугацаа дууссан тул «Хугацаа дууссан» болгов`); }
+  catch (e) { console.warn('maintenance', e); }
   try { overview = await adminOverview(); }
   catch (e) { root.innerHTML = `<div class="alert error" style="margin:30px 0">${esc(friendlyError(e))}</div><button class="btn btn-light" id="lo">Гарах</button>`; document.getElementById('lo').onclick = () => logout(); return; }
   renderShell();
@@ -94,11 +96,16 @@ function renderShell() {
 }
 
 // ---------- bookings
+function hoursLeft(b) {
+  const t = toDate(b.pendingSince) || toDate(b.createdAt); if (!t) return '';
+  const ms = t.getTime() + 24 * 3600000 - Date.now(); if (ms <= 0) return '';
+  return `⏱ ${Math.floor(ms / 3600000)}ц ${Math.floor(ms % 3600000 / 60000)}м үлдсэн`;
+}
 let allBookings = [];
 async function renderBookings() {
   const el = document.getElementById('tabc');
   el.innerHTML = `<div class="filters">
-    <select class="input" id="f-status"><option value="pending">Хүлээгдэж буй</option><option value="confirmed">Баталгаажсан</option><option value="cancelled">Цуцлагдсан</option><option value="all">Бүгд</option></select>
+    <select class="input" id="f-status"><option value="pending">Хүлээгдэж буй</option><option value="confirmed">Баталгаажсан</option><option value="cancelled">Цуцлагдсан</option><option value="expired">Хугацаа дууссан</option><option value="all">Бүгд</option></select>
     <select class="input" id="f-stallion"><option value="all">Бүх азарга</option>${overview.stallions.map(s => `<option value="${s.slug}">${esc(s.name)} (${s.stats.confirmedMares}/${s.stats.capacity})</option>`).join('')}</select>
     <input class="input" id="f-q" placeholder="Нэр, утас, код хайх…" value="${esc(filt.q)}">
     <button class="btn btn-light btn-sm" id="f-reload">⟳ Шинэчлэх</button></div>
@@ -115,7 +122,7 @@ async function renderBookings() {
 function drawBookings() {
   const wrap = document.getElementById('btable'); if (!wrap) return;
   let list = allBookings.slice();
-  if (filt.status !== 'all') list = list.filter(b => b.status === filt.status);
+  if (filt.status !== 'all') list = list.filter(b => b.displayStatus === filt.status);
   if (filt.stallion !== 'all') list = list.filter(b => b.stallion === filt.stallion);
   const q = filt.q.toLowerCase();
   if (q) list = list.filter(b => [b.ownerName, b.phone, b.code, b.location, b.mareInfo].join(' ').toLowerCase().includes(q));
@@ -127,7 +134,7 @@ function drawBookings() {
       const qn = b.queueFrom ? `<div class="small muted">Дараалал ${b.queueFrom === b.queueTo ? b.queueFrom : b.queueFrom + '–' + b.queueTo}</div>` : '';
       return `<tr>
         <td class="mono"><a href="${url.booking(b.code)}" target="_blank">${esc(b.code)}</a></td>
-        <td><span class="tag ${b.status}">${statusMn(b.status)}</span>${qn}</td>
+        <td><span class="tag ${b.displayStatus}">${statusMn(b.displayStatus)}</span>${qn}${b.displayStatus === 'pending' ? `<div class="small muted">${hoursLeft(b)}</div>` : ''}</td>
         <td><b>${esc(st ? st.name : b.stallion)}</b><div class="small muted">${st ? st.stats.confirmedMares + '/' + st.stats.capacity + ' · ' + rem + ' үлдсэн' : ''}</div></td>
         <td><b>${esc(b.ownerName)}</b><div class="small"><a href="tel:${esc(b.phone)}">${esc(b.phone)}</a></div><div class="small muted">${esc(b.location || '')}</div></td>
         <td style="text-align:center"><b>${b.mares}</b></td>
@@ -137,7 +144,7 @@ function drawBookings() {
           ${b.status !== 'confirmed' ? `<button class="btn btn-green btn-sm" data-act="confirm" data-code="${b.code}" ${b.mares > rem ? 'disabled title="Суудал хүрэлцэхгүй"' : ''}>✓ Баталгаажуулах</button>` : ''}
           ${b.status === 'confirmed' ? `<a class="btn btn-light btn-sm" href="${url.booking(b.code)}" target="_blank">🖨 Маягт</a>` : ''}
           ${b.status !== 'cancelled' ? `<button class="btn btn-light btn-sm" data-act="cancel" data-code="${b.code}" style="color:var(--red)">✕ Цуцлах</button>` : ''}
-          ${b.status !== 'pending' ? `<button class="btn btn-light btn-sm" data-act="reopen" data-code="${b.code}">↩ Хүлээгдэх</button>` : ''}
+          ${b.displayStatus !== 'pending' ? `<button class="btn btn-light btn-sm" data-act="reopen" data-code="${b.code}">↩ Хүлээгдэх</button>` : ''}
         </div></td></tr>`;
     }).join('')}</tbody></table>`;
   wrap.querySelectorAll('button[data-act]').forEach(btn => btn.addEventListener('click', () => action(btn.dataset.act, btn.dataset.code, allBookings.find(x => x.code === btn.dataset.code))));
@@ -180,7 +187,7 @@ async function exportCsv() {
     const rows = [['Код', 'Төлөв', 'Азарга', 'Захиалагч', 'Утас', 'Гүүний тоо', 'Дараалал', 'Гүүний мэдээлэл', 'Байршил', 'Тайлбар', 'Захиалсан', 'Баталгаажсан']];
     list.slice().reverse().forEach(b => {
       const st = overview.stallions.find(s => s.slug === b.stallion);
-      rows.push([b.code, statusMn(b.status), st ? st.name : b.stallion, b.ownerName, b.phone, b.mares,
+      rows.push([b.code, statusMn(b.displayStatus), st ? st.name : b.stallion, b.ownerName, b.phone, b.mares,
         b.queueFrom ? (b.queueFrom === b.queueTo ? b.queueFrom : `${b.queueFrom}-${b.queueTo}`) : '',
         b.mareInfo, b.location, b.note, fmtDate(b.createdAt), fmtDate(b.confirmedAt)]);
     });
@@ -196,7 +203,7 @@ function renderStallions() {
     <div class="admin-grid">${overview.stallions.map(s => `
     <div class="admin-card"><img src="${img(s.images.main, true)}" alt=""><div class="b">
       <h4>${esc(s.name)} ${s.active === false ? '<span class="tag cancelled">идэвхгүй</span>' : ''}</h4>
-      <div class="meta">${esc(s.nameEn)} · ${esc(s.breed)} · ${priceText(s.price)}</div>
+      <div class="meta">${esc(s.nameEn)} · ${esc(s.breed)} · ${priceHtml(s)}${Number(s.discount || 0) > 0 ? ` <span class="sale-tag">−${s.discount}%</span>` : ''}</div>
       ${meterHtml(s.stats)}
       <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-light btn-sm" data-edit="${s.slug}">✎ Засах</button><a class="btn btn-light btn-sm" href="${url.stallion(s.slug)}" target="_blank">Харах</a></div>
     </div></div>`).join('')}</div>`;
@@ -210,13 +217,17 @@ function editStallion(slug) {
     <div class="row">${f('breed', 'Үүлдэр')}${f('foaled', 'Төрсөн он', 'number')}</div>
     <div class="row">${f('sire', 'Эцэг')}${f('dam', 'Эх')}</div>
     <div class="row"><div><label>Үржүүлгийн үнэ (сая ₮) — хоосон бол Private</label><input class="input" name="price" type="number" step="0.5" value="${s.price == null ? '' : s.price}"></div>
-      <div><label>Багтаамж (гүү) — одоо ${s.stats.confirmedMares} баталгаажсан</label><input class="input" name="capacity" type="number" min="${s.stats.confirmedMares || 1}" max="100" value="${s.capacity}"></div></div>
+      <div><label>Хямдрал (%) — 0 бол хямдралгүй</label><input class="input" name="discount" type="number" min="0" max="90" step="1" value="${Number(s.discount || 0)}"><div class="hint" id="disc-preview"></div></div></div>
+    <div class="row"><div><label>Багтаамж (гүү) — одоо ${s.stats.confirmedMares} баталгаажсан</label><input class="input" name="capacity" type="number" min="${s.stats.confirmedMares || 1}" max="100" value="${s.capacity}"></div><div></div></div>
     <div><label>Танилцуулга</label><textarea class="input" name="description">${esc(s.description || '')}</textarea></div>
     <div><label>Нэмэлт тэмдэглэл (эцэг, эхийн тухай)</label><textarea class="input" name="notes">${esc(s.notes || '')}</textarea></div>
     <div class="row">${f('order', 'Эрэмбэ (жагсаалтад)', 'number')}<div><label>Төлөв</label><label class="switch" style="font-weight:500;margin-top:8px"><input type="checkbox" name="active" ${s.active !== false ? 'checked' : ''}> Захиалга авна (идэвхтэй)</label></div></div>
     <div id="eerr"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-light" type="button" id="m-no">Болих</button><button class="btn btn-green" type="submit">Хадгалах</button></div></form>`);
   document.getElementById('m-no').onclick = closeModal;
+  const ef = document.getElementById('ef');
+  const prev = () => { const p = ef.price.value === '' ? null : Number(ef.price.value), d = Number(ef.discount.value || 0); document.getElementById('disc-preview').innerHTML = p == null ? 'Private — хямдрал үйлчлэхгүй' : (d > 0 ? `Хямдарсан үнэ: <b>${priceHtml({ price: p, discount: d })}</b>` : ''); };
+  ef.price.addEventListener('input', prev); ef.discount.addEventListener('input', prev); prev();
   document.getElementById('ef').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target); const body = {};
@@ -236,11 +247,19 @@ async function renderSettings() {
     <div class="row">${f('siteName', 'Сайтын нэр')}${f('siteTagline', 'Уриа (толгойд)')}</div>
     <div class="row">${f('orgName', 'Байгууллагын нэр (маягт дээр)')}${f('phone', 'Утас')}</div>
     <div class="row">${f('address', 'Хаяг')}${f('season', 'Үржүүлгийн улирал')}</div>
+    <div class="row">${f('confirmPhone', 'Баталгаажуулах утас (24 цагийн анхааруулгад)')}${f('notifyEmail', 'Шинэ захиалгын мэдэгдэл очих имэйл', 'email')}</div>
+    <div><button class="btn btn-light btn-sm" type="button" id="test-mail">✉ Туршилтын имэйл илгээх</button> <span class="hint">Эхний удаа FormSubmit тухайн хаяг руу «Activate» захидал илгээнэ — түүнийг баталгаажуулсны дараа мэдэгдэл ирж эхэлнэ.</span></div>
     <div class="row">${f('defaultCapacity', 'Анхдагч багтаамж (шинэ азаргад)', 'number')}${f('maxMaresPerBooking', 'Нэг захиалгын дээд гүүний тоо (1–5)', 'number')}</div>
     <div><label>Маягтын нөхцөл (мөр бүр нэг заалт)</label><textarea class="input" name="terms" style="min-height:140px">${esc((c.terms || []).join('\n'))}</textarea></div>
     <div id="serr"></div>
     <button class="btn btn-green" type="submit">Хадгалах</button>
     <p class="hint">Админ имэйлүүдийг эндээс биш, Firebase Console → Firestore → Rules хэсэгт (firestore.rules) өөрчилнө.</p></form></div>`;
+  document.getElementById('test-mail').addEventListener('click', async () => {
+    const to = document.querySelector('#sf [name=notifyEmail]').value.trim();
+    if (!to) return toast('Имэйл хаяг оруулна уу');
+    const ok = await notifyNewBooking({ code: 'GT-TEST00', ownerName: 'Туршилт', phone: '00000000', mares: 1, mareInfo: 'Туршилтын захиалга', location: '', note: 'Энэ бол туршилтын имэйл' }, { name: 'Туршилт', nameEn: 'TEST', price: null }, { notifyEmail: to });
+    toast(ok ? 'Илгээгдлээ — ' + to + ' хаягаа шалгана уу' : 'Илгээж чадсангүй');
+  });
   document.getElementById('sf').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target); const body = {};
