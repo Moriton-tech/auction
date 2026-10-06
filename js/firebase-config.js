@@ -1,11 +1,11 @@
-// Firebase төслийн тохиргоо.
-// Firebase Console → Project settings → General → "Your apps" → Web app → SDK setup → "Config" хэсгээс хуулж энд тавина.
+// Firebase төслийн тохиргоо (urjuulegauction).
 // Эдгээр түлхүүр нууц биш (сайтын хөтөч дээр ил байдаг); өгөгдлийг firestore.rules хамгаална.
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "0",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyBifBwD9750GK5ggeR6TziqvXGDE4qMtkI",
+  authDomain: "urjuulegauction.firebaseapp.com",
+  projectId: "urjuulegauction",
+  storageBucket: "urjuulegauction.firebasestorage.app",
+  messagingSenderId: "208001220076",
+  appId: "1:208001220076:web:47c5b09a94d6b6317e54c9",
+  measurementId: "G-4HHR0N1FVB"
 };
