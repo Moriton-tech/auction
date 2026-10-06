@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Захиалга</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<header class="site-header" id="site-header"></header>
+<main>
+  <div class="container" id="content"><p class="muted" style="padding:30px 0">Ачаалж байна…</p></div>
+</main>
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="js/vendor/qrcode.js"></script>
+<script type="module">
+import { getBooking, friendlyError } from './js/db.js';
+import { esc, priceText, fmtDate, fmtDay, statusMn, renderChrome, LOGO, url, img, param, toast } from './js/common.js';
+
+const cfg = await renderChrome();
+const root = document.getElementById('content');
+const code = (param('code') || '').trim().toUpperCase();
+const isNew = param('new') === '1';
+
+if (!code) {
+  root.innerHTML = `<div class="panel" style="max-width:520px;margin:50px auto">
+    <h2>Захиалгын төлөв шалгах</h2>
+    <form class="form" id="cf"><div><label>Захиалгын код</label><input class="input" id="code" placeholder="GT-XXXXXX" style="text-transform:uppercase" autofocus></div>
+    <button class="btn btn-primary" type="submit">Шалгах</button></form>
+    <p class="hint" style="margin-top:12px">Код нь захиалга илгээсний дараа дэлгэцэнд гарсан GT- эхлэлтэй 9 тэмдэгт. Мартсан бол ${esc(cfg.phone || '')} дугаарт холбогдоно уу.</p></div>`;
+  document.getElementById('cf').addEventListener('submit', e => { e.preventDefault(); const c = document.getElementById('code').value.trim().toUpperCase(); if (c) location.href = url.booking(c); });
+} else {
+  let b;
+  try { b = await getBooking(code); }
+  catch (e) { root.innerHTML = `<div class="alert error" style="margin:40px 0">${esc(friendlyError(e))} <a href="zahialga.html">Дахин оролдох</a></div>`; throw e; }
+  document.title = 'Захиалга ' + b.code;
+  const s = b.stallionData || {};
+  const link = url.bookingAbs(b.code);
+  const mainKey = s.images ? s.images.main : '';
+
+  const head = `<div class="status-hero">
+    ${isNew ? `<div class="alert ok" style="max-width:640px;margin:0 auto 16px">Таны захиалга амжилттай бүртгэгдлээ. Доорх кодыг хадгалаарай — энэ кодоор төлөвөө шалгана.</div>` : ''}
+    <div class="code-big">${esc(b.code)}</div>
+    <div style="margin:8px 0 6px"><span class="status-pill ${b.status}">${statusMn(b.status)}</span></div>
+    <div class="muted small">Захиалсан: ${fmtDate(b.createdAt)}</div>
+  </div>`;
+
+  const summary = `<div class="panel no-print" style="max-width:760px;margin:10px auto 30px">
+    <div style="display:flex;gap:14px;align-items:center;margin:0 0 14px">
+      <img src="${img(mainKey, true)}" style="width:120px;height:90px;object-fit:cover;border-radius:8px" alt="">
+      <div><b style="font-size:18px">${esc(s.name)} азарга</b><br><span class="muted">${esc(s.nameEn || '')} · ${esc(s.breed || '')} · ${priceText(s.price)}</span><br><a href="${url.stallion(s.slug || b.stallion)}">Азарганы хуудас →</a></div>
+    </div>
+    <div class="spec" style="margin:0">
+      <div><span>Захиалагч</span><b>${esc(b.ownerName)}</b></div>
+      <div><span>Утас</span><b>${esc(b.phone)}</b></div>
+      <div><span>Гүүний тоо</span><b>${b.mares}</b></div>
+      <div><span>Байршил</span><b>${esc(b.location || '—')}</b></div>
+      <div style="grid-column:1/-1"><span>Гүүний мэдээлэл</span><b>${esc(b.mareInfo || '—')}</b></div>
+      ${b.note ? `<div style="grid-column:1/-1"><span>Тайлбар</span><b>${esc(b.note)}</b></div>` : ''}
+    </div>
+    ${b.status === 'pending' ? `<div class="alert warn" style="margin-top:14px">Манай ажилтан таны захиалгыг хянаж, <b>${esc(b.phone)}</b> дугаарт холбогдон баталгаажуулна. Баталгаажсаны дараа энэ хуудсанд баталгаажуулалтын маягт гарна.</div>` : ''}
+    ${b.status === 'cancelled' ? `<div class="alert error" style="margin-top:14px">Захиалга цуцлагдсан${b.cancelReason ? ': ' + esc(b.cancelReason) : ''}. Асуулт байвал ${esc(cfg.phone || '')} дугаарт холбогдоно уу.</div>` : ''}
+  </div>`;
+
+  let cert = '';
+  if (b.status === 'confirmed') {
+    const q = b.queueFrom === b.queueTo ? `${b.queueFrom}` : `${b.queueFrom}–${b.queueTo}`;
+    const total = s.price == null ? 'Тохиролцоно' : (Number(s.price) * b.mares) + ' сая ₮';
+    cert = `
+    <div class="print-actions no-print">
+      <button class="btn btn-green" id="print-btn">🖨 Маягт хэвлэх / PDF хадгалах</button>
+      <button class="btn btn-light" id="copy-btn">Холбоос хуулах</button>
+    </div>
+    <div class="cert" id="cert">
+      <div class="head">
+        <div class="org"><span class="logo">${LOGO}</span><div><b>${esc(cfg.orgName || cfg.siteName)}</b><span>${esc(cfg.address || '')}${cfg.phone ? ' · ' + esc(cfg.phone) : ''}</span></div></div>
+        <div class="stamp">БАТАЛГААЖСАН</div>
+        <div class="no">Баталгаажуулалт №<b>${esc(b.code)}</b>${fmtDay(b.confirmedAt)}</div>
+      </div>
+      <h2>Гүү тавих захиалгын баталгаажуулалт</h2>
+      <div class="cols">
+        <div class="box"><h4>Азарга</h4>
+          <div class="horse"><img src="${img(mainKey, true)}" alt=""><div><b style="font-size:17px">${esc(s.name)} азарга</b><br><span class="muted small">${esc(s.nameEn || '')}${s.foaled ? ' · ' + s.foaled : ''}</span></div></div>
+          <div class="kv" style="margin-top:10px"><span>Үүлдэр</span><div>${esc(s.breed || '')}</div><span>Эцэг</span><div>${esc(s.sire || '—')}</div><span>Эх</span><div>${esc(s.dam || '—')}</div><span>Үржүүлгийн үнэ</span><div>${priceText(s.price, s.price != null)}${s.price != null ? ' / гүү' : ''}</div></div>
+        </div>
+        <div class="box"><h4>Захиалагч</h4>
+          <div class="kv"><span>Нэр</span><div><b>${esc(b.ownerName)}</b></div><span>Утас</span><div>${esc(b.phone)}</div><span>Байршил</span><div>${esc(b.location || '—')}</div><span>Гүүний тоо</span><div><b>${b.mares}</b></div><span>Гүүний мэдээлэл</span><div>${esc(b.mareInfo || '—')}</div><span>Нийт төлбөр</span><div><b>${total}</b></div></div>
+        </div>
+      </div>
+      <div class="queue-big"><b>${q} / ${s.capacity || cfg.defaultCapacity || 10}</b><span>Азарганд тавих дараалал (${esc(cfg.season || '')}) · Захиалсан: ${fmtDate(b.createdAt)} · Баталгаажсан: ${fmtDate(b.confirmedAt)}</span></div>
+      <div class="terms"><b>Нөхцөл:</b><ol>${(cfg.terms || []).map(t => `<li>${esc(t)}</li>`).join('')}</ol></div>
+      <div class="foot">
+        <div class="sign"><b>Үржүүлгийн алба</b>Гарын үсэг / тамга</div>
+        <div class="sign"><b>Захиалагч: ${esc(b.ownerName)}</b>Гарын үсэг</div>
+        <div class="qr" id="qr"><b>${esc(b.code)}</b><br>QR уншуулж шалгана</div>
+      </div>
+    </div>`;
+  }
+
+  root.innerHTML = head + summary + cert;
+  if (b.status === 'confirmed') {
+    document.getElementById('print-btn').addEventListener('click', () => window.print());
+    document.getElementById('copy-btn').addEventListener('click', () => navigator.clipboard.writeText(link).then(() => toast('Холбоос хуулагдлаа')));
+    if (window.qrcode) {
+      try {
+        const qr = qrcode(0, 'M'); qr.addData(link); qr.make();
+        document.getElementById('qr').insertAdjacentHTML('afterbegin', qr.createSvgTag({ cellSize: 3, margin: 0, scalable: true }));
+      } catch (e) { /* QR байхгүй бол зүгээр */ }
+    }
+  }
+}
+</script>
+</body>
+</html>

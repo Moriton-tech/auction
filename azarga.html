@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Азарга</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<header class="site-header" id="site-header"></header>
+<main>
+  <div class="container">
+    <div class="breadcrumb"><a href="index.html">Азарганууд</a> › <span id="bc-name">…</span></div>
+    <div id="content"><p class="muted">Ачаалж байна…</p></div>
+  </div>
+</main>
+<footer class="site-footer" id="site-footer"></footer>
+
+<script type="module">
+import { getStallion, createBooking, friendlyError } from './js/db.js';
+import { esc, priceText, renderChrome, meterHtml, lightbox, toast, url, img, param } from './js/common.js';
+
+const cfg = await renderChrome();
+const slug = param('id') || '';
+const root = document.getElementById('content');
+const openLb = lightbox();
+
+let data;
+try { data = await getStallion(slug); }
+catch (e) { root.innerHTML = `<div class="alert error">${esc(friendlyError(e))}</div>`; throw e; }
+const s = data.stallion, st = s.stats;
+document.title = s.name + ' азарга';
+document.getElementById('bc-name').textContent = s.name + ' азарга';
+const maxM = Math.min(st.remaining, Number(cfg.maxMaresPerBooking || 5));
+
+const imgs = [
+  { key: s.images.main, small: true, label: 'Зураг 1' },
+  { key: s.images.second, small: true, label: 'Зураг 2' },
+  { key: s.images.page, small: false, label: 'Удмын бичиг' }
+];
+const statusBox = st.status === 'full'
+  ? `<div class="status-box full"><b>Захиалга хаагдсан — ${st.confirmedMares}/${st.capacity} дүүрсэн</b><br>Энэ азарганы бүх суудал баталгаажсан байна.</div>`
+  : st.status === 'inactive'
+    ? `<div class="status-box inactive"><b>Одоогоор захиалга авахгүй байна</b></div>`
+    : `<div class="status-box open"><b>${st.remaining} суудал үлдсэн</b> (${st.confirmedMares}/${st.capacity} баталгаажсан${st.pendingMares ? ', ' + st.pendingMares + ' хүлээгдэж байна' : ''})</div>`;
+
+const queueRows = data.queue.length
+  ? `<div class="queue"><h4 style="margin:14px 0 6px;font-size:14px">Баталгаажсан дараалал</h4><table><tr><th>Дараалал</th><th>Захиалагч</th><th>Гүү</th></tr>
+      ${data.queue.map(q => `<tr><td><b>${q.queueFrom === q.queueTo ? q.queueFrom : q.queueFrom + '–' + q.queueTo}</b></td><td>${esc(q.owner || '')}</td><td>${q.mares}</td></tr>`).join('')}</table></div>`
+  : '';
+
+root.innerHTML = `
+<div class="detail">
+    <div class="gallery">
+      <div class="main"><img id="main-img" src="${img(imgs[0].key)}" alt="${esc(s.name)}"></div>
+      <div class="thumbs">${imgs.map((im, i) => `<button class="${i === 0 ? 'active' : ''}" data-i="${i}" title="${im.label}"><img src="${img(im.key, im.small)}" alt=""></button>`).join('')}</div>
+      <p class="hint">Зураг дээр дарж томруулна. 3 дахь зураг — каталогийн хуудас, удмын бичиг.</p>
+    </div>
+  <div class="panel descp">
+    <h3 style="font-size:16px">Танилцуулга</h3>
+    <div class="desc"><p>${esc(s.description)}</p>${s.notes ? `<p class="muted">${esc(s.notes)}</p>` : ''}</div>
+  </div>
+    <div class="panel info">
+      <div class="title-row">
+        <div><h1>${esc(s.name)} азарга</h1><div class="sub">${esc(s.nameEn)}${s.foaled ? ' · FOALED ' + s.foaled : ''}</div></div>
+        <div class="price-big">${priceText(s.price)}<small>үржүүлгийн үнэ${s.price == null ? ' — тохиролцоно' : ' ₮ / гүү'}</small></div>
+      </div>
+      <div class="spec">
+        <div><span>Үүлдэр</span><b>${esc(s.breed)}</b></div>
+        <div><span>Төрсөн он</span><b>${s.foaled || '—'}</b></div>
+        <div><span>Эцэг</span><b>${esc(s.sire || '—')}</b></div>
+        <div><span>Эх</span><b>${esc(s.dam || '—')}</b></div>
+        <div><span>Каталогийн №</span><b>${s.catalogNo || '—'}</b></div>
+        <div><span>Багтаамж</span><b>${st.capacity} гүү</b></div>
+      </div>
+      ${meterHtml(st)}
+      ${statusBox}
+      ${queueRows}
+    </div>
+    <div class="panel formp" id="zahialga">
+      <h3 style="font-size:18px">Гүү тавих захиалга өгөх</h3>
+      ${st.status !== 'open' ? `<div class="alert warn">Энэ азарганд одоогоор захиалга авахгүй байна. <a href="index.html">Бусад азаргыг үзэх</a></div>` : `
+      <form class="form" id="bform" autocomplete="on">
+        <div class="row">
+          <div><label>Захиалагчийн нэр <span class="req">*</span></label><input class="input" name="ownerName" required maxlength="80" placeholder="Овог, нэр"></div>
+          <div><label>Утасны дугаар <span class="req">*</span></label><input class="input" name="phone" required inputmode="tel" pattern="[0-9+ \\-]{8,}" placeholder="99112233"></div>
+        </div>
+        <div class="row">
+          <div><label>Гүүний тоо <span class="req">*</span></label>
+            <select class="input" name="mares">${Array.from({ length: maxM }, (_, i) => `<option value="${i + 1}">${i + 1} гүү</option>`).join('')}</select>
+            <div class="hint">Нэг захиалгаар хамгийн ихдээ ${maxM} гүү</div></div>
+          <div><label>Аймаг, сум</label><input class="input" name="location" maxlength="120" placeholder="Төв аймаг, Эрдэнэ сум"></div>
+        </div>
+        <div><label>Гүүний мэдээлэл</label><textarea class="input" name="mareInfo" maxlength="500" placeholder="Зүс, нас, удам, онцлог (жишээ: Хээр гүү, 6 нас, Сарт хээрийн төл)"></textarea></div>
+        <div><label>Нэмэлт тайлбар</label><input class="input" name="note" maxlength="500"></div>
+        <input class="hp" name="website" tabindex="-1" autocomplete="off">
+        <div id="ferr"></div>
+        <button class="btn btn-primary btn-block" type="submit" id="fbtn">Захиалга илгээх</button>
+        <p class="hint">Илгээснээр захиалгын код авна. Манай ажилтан утсаар холбогдож баталгаажуулсны дараа <b>баталгаажуулалтын маягт</b> үүснэ.</p>
+      </form>`}
+    </div>
+</div>`;
+
+const mainImg = document.getElementById('main-img');
+document.querySelectorAll('.thumbs button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.thumbs button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); mainImg.src = img(imgs[b.dataset.i].key);
+}));
+mainImg.addEventListener('click', () => openLb(mainImg.src));
+
+const form = document.getElementById('bform');
+if (form) form.addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('fbtn'); const errBox = document.getElementById('ferr');
+  btn.disabled = true; btn.textContent = 'Илгээж байна…'; errBox.innerHTML = '';
+  const fd = new FormData(form); const body = { stallion: slug };
+  fd.forEach((v, k) => body[k] = v);
+  try {
+    const code = await createBooking(body);
+    toast('Захиалга бүртгэгдлээ');
+    location.href = url.booking(code) + '&new=1';
+  } catch (err) {
+    errBox.innerHTML = `<div class="alert error">${esc(friendlyError(err))}</div>`;
+    btn.disabled = false; btn.textContent = 'Захиалга илгээх';
+  }
+});
+if (location.hash === '#zahialga') document.getElementById('zahialga').scrollIntoView({ behavior: 'smooth' });
+</script>
+</body>
+</html>

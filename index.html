@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Үржүүлгийн азарганууд</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<header class="site-header" id="site-header"></header>
+<main>
+  <section class="hero">
+    <div class="container">
+      <h1 id="hero-title">Үржүүлгийн азарганд гүү тавих захиалга</h1>
+      <p id="hero-text">Дэлхийн шилдэг удмын цэвэр англи, цэвэр араб, англо-араб азаргануудаас сонгож гүүгээ бүртгүүлээрэй. Азарга бүр <b>10 гүү</b> хүлээн авна — баталгаажсан дарааллаар хавар гүүг азарганд тавина.</p>
+      <div class="stats" id="stats"></div>
+      <form class="check" id="check-form">
+        <input id="check-code" placeholder="Захиалгын код (GT-XXXXXX)" maxlength="12" autocomplete="off">
+        <button class="btn btn-primary" type="submit">Шалгах</button>
+      </form>
+    </div>
+  </section>
+
+  <div class="container" id="azarga">
+    <div class="toolbar">
+      <div class="chips" id="chips">
+        <button class="chip active" data-breed="all">Бүгд</button>
+        <button class="chip" data-breed="Цэвэр англи">Цэвэр англи</button>
+        <button class="chip" data-breed="Цэвэр араб">Цэвэр араб</button>
+        <button class="chip" data-breed="Англо-Араб">Англо-Араб</button>
+        <button class="chip" data-breed="open">Зөвхөн нээлттэй</button>
+      </div>
+      <select id="sort">
+        <option value="catalog">Каталогийн дараалал</option>
+        <option value="price-desc">Үнэ: өндрөөс</option>
+        <option value="price-asc">Үнэ: багаас</option>
+        <option value="remaining">Үлдсэн суудал</option>
+        <option value="name">Нэрээр</option>
+      </select>
+    </div>
+    <div class="grid" id="grid"><p class="muted">Ачаалж байна…</p></div>
+  </div>
+</main>
+<footer class="site-footer" id="site-footer"></footer>
+
+<script type="module">
+import { listStallions, friendlyError } from './js/db.js';
+import { esc, priceText, renderChrome, meterHtml, url, img } from './js/common.js';
+
+const cfg = await renderChrome('home');
+document.getElementById('hero-title').textContent = cfg.siteTagline || 'Үржүүлгийн азарганд гүү тавих захиалга';
+document.getElementById('hero-text').innerHTML = `Дэлхийн шилдэг удмын цэвэр англи, цэвэр араб, англо-араб азаргануудаас сонгож гүүгээ бүртгүүлээрэй. Азарга бүр <b>${cfg.defaultCapacity || 10} гүү</b> хүлээн авна — баталгаажсан дарааллаар ${esc(cfg.season || 'хавар')} гүүг азарганд тавина.`;
+
+let all = [];
+let breed = 'all', sort = 'catalog';
+
+function render() {
+  let list = all.filter(s => s.active !== false);
+  if (breed === 'open') list = list.filter(s => s.stats.status === 'open');
+  else if (breed !== 'all') list = list.filter(s => s.breed === breed);
+  const pv = s => s.price == null ? -1 : Number(s.price);
+  if (sort === 'price-desc') list.sort((a, b) => pv(b) - pv(a));
+  else if (sort === 'price-asc') list.sort((a, b) => (pv(a) < 0 ? 1e9 : pv(a)) - (pv(b) < 0 ? 1e9 : pv(b)));
+  else if (sort === 'remaining') list.sort((a, b) => b.stats.remaining - a.stats.remaining);
+  else if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name, 'mn'));
+  else list.sort((a, b) => (a.order || 99) - (b.order || 99));
+
+  const grid = document.getElementById('grid');
+  if (!list.length) { grid.innerHTML = '<p class="muted">Тохирох азарга олдсонгүй.</p>'; return; }
+  grid.innerHTML = list.map(s => {
+    const st = s.stats;
+    const full = st.status === 'full';
+    const badge = full ? `<span class="badge full">Дүүрсэн ${st.confirmedMares}/${st.capacity}</span>`
+      : (st.remaining <= 3 ? `<span class="badge" style="background:var(--orange)">${st.remaining} суудал үлдлээ</span>` : '');
+    return `<article class="card ${full ? 'full' : ''}">
+      <a class="photo" href="${url.stallion(s.slug)}">
+        <img src="${img(s.images.main, true)}" alt="${esc(s.name)}" loading="lazy">
+        ${badge}<span class="badge breed">${esc(s.breed)}</span>
+      </a>
+      <div class="body">
+        <h3><a href="${url.stallion(s.slug)}">${esc(s.name)} азарга</a><small>${esc(s.nameEn)}${s.foaled ? ' · ' + s.foaled + ' он' : ''}</small></h3>
+        <div class="price">${priceText(s.price)}<span>үржүүлгийн үнэ</span></div>
+        <div class="meta">Эцэг: ${esc(s.sire || '—')}</div>
+        ${meterHtml(st)}
+        <div class="actions">
+          <a class="btn btn-light btn-sm" href="${url.stallion(s.slug)}">Дэлгэрэнгүй</a>
+          ${full ? '<button class="btn btn-sm" disabled>Хаагдсан</button>' : `<a class="btn btn-primary btn-sm" href="${url.stallion(s.slug)}#zahialga">Захиалах</a>`}
+        </div>
+      </div></article>`;
+  }).join('');
+}
+
+try {
+  all = await listStallions();
+  if (!all.length) {
+    document.getElementById('grid').innerHTML = `<div class="alert warn">Азарганы мэдээлэл хараахан ороогүй байна. <a href="${url.admin()}">Админ</a> хуудсанд нэвтэрч «Анхны тохиргоо» товчоор каталогийг импортлоно уу.</div>`;
+  } else {
+    const open = all.filter(s => s.stats.status === 'open').length;
+    const full = all.filter(s => s.stats.status === 'full').length;
+    const confirmed = all.reduce((a, s) => a + s.stats.confirmedMares, 0);
+    document.getElementById('stats').innerHTML = `
+      <div class="stat"><b>${all.filter(s => s.active !== false).length}</b><span>азарга</span></div>
+      <div class="stat"><b>${open}</b><span>захиалга нээлттэй</span></div>
+      <div class="stat"><b>${full}</b><span>дүүрсэн</span></div>
+      <div class="stat"><b>${confirmed}</b><span>гүү баталгаажсан</span></div>`;
+    render();
+  }
+} catch (e) {
+  document.getElementById('grid').innerHTML = `<div class="alert error">${esc(friendlyError(e))}</div>`;
+}
+
+document.getElementById('chips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  b.classList.add('active'); breed = b.dataset.breed; render();
+});
+document.getElementById('sort').addEventListener('change', e => { sort = e.target.value; render(); });
+document.getElementById('check-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const code = document.getElementById('check-code').value.trim().toUpperCase();
+  if (code) location.href = url.booking(code);
+});
+</script>
+</body>
+</html>

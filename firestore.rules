@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================================
+    //  АДМИН ИМЭЙЛҮҮД — зөвхөн энд өөрчилнө (Firebase Authentication-д
+    //  Email/Password-оор үүсгэсэн хэрэглэгчийн имэйл, жижиг үсгээр).
+    // =====================================================================
+    function adminEmails() {
+      return [
+        'khongor95@gmail.com'
+      ];
+    }
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() in adminEmails();
+    }
+
+    function validCode(code) { return code.matches('GT-[A-HJ-NP-Z2-9]{6}'); }
+    function stallionPath(slug) { return /databases/$(database)/documents/stallions/$(slug); }
+
+    // Нийтийн захиалга: зөвхөн 'pending', талбарууд хязгаартай, азарга идэвхтэй ба суудал хүрэлцэхүйц
+    function validBooking(code) {
+      let d = request.resource.data;
+      let s = get(stallionPath(d.stallion)).data;
+      return d.keys().hasOnly(['code', 'stallion', 'ownerName', 'phone', 'mares', 'mareInfo', 'location', 'note', 'status', 'createdAt'])
+        && d.keys().hasAll(['code', 'stallion', 'ownerName', 'phone', 'mares', 'status', 'createdAt'])
+        && d.code == code && validCode(code)
+        && d.stallion is string && exists(stallionPath(d.stallion))
+        && s.active == true
+        && d.mares is int && d.mares >= 1 && d.mares <= 5
+        && (s.confirmedMares + d.mares) <= s.capacity
+        && d.ownerName is string && d.ownerName.size() >= 2 && d.ownerName.size() <= 80
+        && d.phone is string && d.phone.matches('\\+?[0-9]{8,15}')
+        && (!('mareInfo' in d) || (d.mareInfo is string && d.mareInfo.size() <= 500))
+        && (!('location' in d) || (d.location is string && d.location.size() <= 120))
+        && (!('note' in d) || (d.note is string && d.note.size() <= 500))
+        && d.status == 'pending'
+        && d.createdAt == request.time;
+    }
+
+    // Нийтэд харагдах дарааллын бичлэг (утас, нэр байхгүй)
+    function validQueue(code) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['code', 'stallion', 'mares', 'status', 'createdAt'])
+        && d.keys().hasAll(['code', 'stallion', 'mares', 'status', 'createdAt'])
+        && d.code == code && validCode(code)
+        && d.stallion is string && exists(stallionPath(d.stallion))
+        && d.mares is int && d.mares >= 1 && d.mares <= 5
+        && d.status == 'pending'
+        && d.createdAt == request.time;
+    }
+
+    match /stallions/{slug} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /queue/{code} {
+      allow read: if true;
+      allow create: if isAdmin() || validQueue(code);
+      allow update, delete: if isAdmin();
+    }
+
+    match /bookings/{code} {
+      // Кодоо мэддэг хүн л өөрийн захиалгыг уншина (код: 32^6 ≈ 1 тэрбум хувилбар). Жагсаалт — зөвхөн админ.
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if isAdmin() || validBooking(code);
+      allow update, delete: if isAdmin();
+    }
+  }
+}
