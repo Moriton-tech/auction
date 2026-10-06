@@ -20,8 +20,8 @@
 
 <script src="js/vendor/qrcode.js"></script>
 <script type="module">
-import { getBooking, friendlyError } from './js/db.js';
-import { esc, priceText, fmtDate, fmtDay, statusMn, renderChrome, LOGO, url, img, param, toast } from './js/common.js';
+import { getBooking, friendlyError, holdDeadline, HOLD_HOURS } from './js/db.js';
+import { esc, priceHtml, fmtMillion, fmtDate, fmtDay, statusMn, renderChrome, LOGO, url, img, param, toast } from './js/common.js';
 
 const cfg = await renderChrome();
 const root = document.getElementById('content');
@@ -40,6 +40,8 @@ if (!code) {
   try { b = await getBooking(code); }
   catch (e) { root.innerHTML = `<div class="alert error" style="margin:40px 0">${esc(friendlyError(e))} <a href="zahialga.html">Дахин оролдох</a></div>`; throw e; }
   document.title = 'Захиалга ' + b.code;
+  const ds = b.displayStatus || b.status;
+  const confirmPhone = cfg.confirmPhone || '80881069';
   const s = b.stallionData || {};
   const link = url.bookingAbs(b.code);
   const mainKey = s.images ? s.images.main : '';
@@ -47,14 +49,14 @@ if (!code) {
   const head = `<div class="status-hero">
     ${isNew ? `<div class="alert ok" style="max-width:640px;margin:0 auto 16px">Таны захиалга амжилттай бүртгэгдлээ. Доорх кодыг хадгалаарай — энэ кодоор төлөвөө шалгана.</div>` : ''}
     <div class="code-big">${esc(b.code)}</div>
-    <div style="margin:8px 0 6px"><span class="status-pill ${b.status}">${statusMn(b.status)}</span></div>
+    <div style="margin:8px 0 6px"><span class="status-pill ${ds}">${statusMn(ds)}</span></div>
     <div class="muted small">Захиалсан: ${fmtDate(b.createdAt)}</div>
   </div>`;
 
   const summary = `<div class="panel no-print" style="max-width:760px;margin:10px auto 30px">
     <div style="display:flex;gap:14px;align-items:center;margin:0 0 14px">
       <img src="${img(mainKey, true)}" style="width:120px;height:90px;object-fit:cover;border-radius:8px" alt="">
-      <div><b style="font-size:18px">${esc(s.name)} азарга</b><br><span class="muted">${esc(s.nameEn || '')} · ${esc(s.breed || '')} · ${priceText(s.price)}</span><br><a href="${url.stallion(s.slug || b.stallion)}">Азарганы хуудас →</a></div>
+      <div><b style="font-size:18px">${esc(s.name)} азарга</b><br><span class="muted">${esc(s.nameEn || '')} · ${esc(s.breed || '')} · ${priceHtml(s)}</span><br><a href="${url.stallion(s.slug || b.stallion)}">Азарганы хуудас →</a></div>
     </div>
     <div class="spec" style="margin:0">
       <div><span>Захиалагч</span><b>${esc(b.ownerName)}</b></div>
@@ -64,14 +66,18 @@ if (!code) {
       <div style="grid-column:1/-1"><span>Гүүний мэдээлэл</span><b>${esc(b.mareInfo || '—')}</b></div>
       ${b.note ? `<div style="grid-column:1/-1"><span>Тайлбар</span><b>${esc(b.note)}</b></div>` : ''}
     </div>
-    ${b.status === 'pending' ? `<div class="alert warn" style="margin-top:14px">Манай ажилтан таны захиалгыг хянаж, <b>${esc(b.phone)}</b> дугаарт холбогдон баталгаажуулна. Баталгаажсаны дараа энэ хуудсанд баталгаажуулалтын маягт гарна.</div>` : ''}
+    ${ds === 'pending' ? `<div class="hold-warn" style="margin-top:14px">⏱ Энэ захиалга <b>${HOLD_HOURS} цагийн дотор</b> баталгаажаагүй бол автоматаар устана. Үлдсэн хугацаа: <b id="countdown">—</b><br>Баталгаажуулахын тулд манай <a href="tel:${esc(confirmPhone)}"><b>${esc(confirmPhone)}</b></a> дугаарт холбогдоорой.</div>
+      <div class="alert warn" style="margin-top:10px">Баталгаажсаны дараа энэ хуудсанд баталгаажуулалтын маягт гарна.</div>` : ''}
+    ${ds === 'expired' ? `<div class="alert error" style="margin-top:14px">Энэ захиалга ${HOLD_HOURS} цагийн дотор баталгаажаагүй тул <b>хугацаа нь дууссан</b>. Дахин захиалах эсвэл <a href="tel:${esc(confirmPhone)}"><b>${esc(confirmPhone)}</b></a> дугаарт холбогдоорой.</div>` : ''}
     ${b.status === 'cancelled' ? `<div class="alert error" style="margin-top:14px">Захиалга цуцлагдсан${b.cancelReason ? ': ' + esc(b.cancelReason) : ''}. Асуулт байвал ${esc(cfg.phone || '')} дугаарт холбогдоно уу.</div>` : ''}
   </div>`;
 
   let cert = '';
   if (b.status === 'confirmed') {
     const q = b.queueFrom === b.queueTo ? `${b.queueFrom}` : `${b.queueFrom}–${b.queueTo}`;
-    const total = s.price == null ? 'Тохиролцоно' : (Number(s.price) * b.mares) + ' сая ₮';
+    const unit = b.unitPrice !== undefined ? b.unitPrice : (s.price == null ? null : Number(s.price));
+    const total = unit == null ? 'Тохиролцоно' : fmtMillion(Math.round(unit * b.mares * 100) / 100) + ' ₮';
+    const unitHtml = unit == null ? 'Private — тохиролцоно' : (Number(b.discount || 0) > 0 && b.listPrice != null ? `<s class="old-price">${fmtMillion(b.listPrice)}</s> ${fmtMillion(unit)} ₮ / гүү (−${b.discount}%)` : `${fmtMillion(unit)} ₮ / гүү`);
     cert = `
     <div class="print-actions no-print">
       <button class="btn btn-green" id="print-btn">🖨 Маягт хэвлэх / PDF хадгалах</button>
@@ -87,7 +93,7 @@ if (!code) {
       <div class="cols">
         <div class="box"><h4>Азарга</h4>
           <div class="horse"><img src="${img(mainKey, true)}" alt=""><div><b style="font-size:17px">${esc(s.name)} азарга</b><br><span class="muted small">${esc(s.nameEn || '')}${s.foaled ? ' · ' + s.foaled : ''}</span></div></div>
-          <div class="kv" style="margin-top:10px"><span>Үүлдэр</span><div>${esc(s.breed || '')}</div><span>Эцэг</span><div>${esc(s.sire || '—')}</div><span>Эх</span><div>${esc(s.dam || '—')}</div><span>Үржүүлгийн үнэ</span><div>${priceText(s.price, s.price != null)}${s.price != null ? ' / гүү' : ''}</div></div>
+          <div class="kv" style="margin-top:10px"><span>Үүлдэр</span><div>${esc(s.breed || '')}</div><span>Эцэг</span><div>${esc(s.sire || '—')}</div><span>Эх</span><div>${esc(s.dam || '—')}</div><span>Үржүүлгийн үнэ</span><div>${unitHtml}</div></div>
         </div>
         <div class="box"><h4>Захиалагч</h4>
           <div class="kv"><span>Нэр</span><div><b>${esc(b.ownerName)}</b></div><span>Утас</span><div>${esc(b.phone)}</div><span>Байршил</span><div>${esc(b.location || '—')}</div><span>Гүүний тоо</span><div><b>${b.mares}</b></div><span>Гүүний мэдээлэл</span><div>${esc(b.mareInfo || '—')}</div><span>Нийт төлбөр</span><div><b>${total}</b></div></div>
@@ -104,6 +110,17 @@ if (!code) {
   }
 
   root.innerHTML = head + summary + cert;
+  const cd = document.getElementById('countdown');
+  const dl = holdDeadline(b);
+  if (cd && dl) {
+    const tick = () => {
+      const ms = dl.getTime() - Date.now();
+      if (ms <= 0) { location.reload(); return; }
+      const h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000);
+      cd.textContent = `${h} цаг ${m} минут`;
+    };
+    tick(); setInterval(tick, 30000);
+  }
   if (b.status === 'confirmed') {
     document.getElementById('print-btn').addEventListener('click', () => window.print());
     document.getElementById('copy-btn').addEventListener('click', () => navigator.clipboard.writeText(link).then(() => toast('Холбоос хуулагдлаа')));
