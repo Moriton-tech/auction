@@ -21,8 +21,6 @@
 
 /* hero */
 .hero { background: radial-gradient(circle at 85% 30%, rgba(201,162,74,.16), transparent 45%), linear-gradient(135deg, var(--green-dark), var(--green) 70%); position: relative; overflow: hidden; }
-.hero::after { content: ""; position: absolute; right: -40px; top: 50%; width: 300px; height: 300px; transform: translateY(-50%); background: var(--logo-gold) center / contain no-repeat; opacity: .12; pointer-events: none; }
-@media (max-width: 760px) { .hero::after { width: 200px; height: 200px; right: -60px; opacity: .08; } }
 .hero .container { position: relative; z-index: 1; }
 .hero h1 { color: #fff; }
 .hero h1::after { content: ""; display: block; width: 64px; height: 3px; background: var(--orange); margin-top: 12px; border-radius: 2px; }
@@ -49,3 +47,45 @@
 /* хөл */
 .site-footer { background: var(--green-dark); border-top: 2px solid var(--orange); }
 .site-footer b { color: var(--gold-light); }
+
+/* hero слайд — азаргануудын зураг ээлжлэн */
+.hero-slider { min-height: 460px; display: flex; align-items: center; padding: 56px 0 64px; }
+.hero-slides { position: absolute; inset: 0; z-index: 0; }
+.hero-slide { position: absolute; inset: 0; background: center 35% / cover no-repeat; opacity: 0; transform: scale(1.06); transition: opacity 1.4s ease, transform 7s ease; }
+.hero-slide.on { opacity: 1; transform: scale(1); }
+.hero-shade { position: absolute; inset: 0; z-index: 0; background: linear-gradient(90deg, rgba(7,42,53,.94) 0%, rgba(7,42,53,.78) 42%, rgba(7,42,53,.25) 75%, rgba(7,42,53,.15) 100%), linear-gradient(0deg, rgba(7,42,53,.6), transparent 40%); }
+.hero-slider .container { width: min(1180px, 100% - 32px); }
+.hero-slider p { text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.hero-caption { position: absolute; right: 0; bottom: -40px; display: flex; flex-direction: column; align-items: flex-end; color: #fff; text-decoration: none !important; text-align: right; }
+.hero-caption b { font-size: 18px; color: var(--gold-light); }
+.hero-caption span { font-size: 13px; opacity: .92; }
+.hero-caption .old-price { color: #d9d4c4; }
+.hero-dots { position: absolute; left: 0; bottom: -44px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 55%; }
+.hero-dots button { width: 8px; height: 8px; border-radius: 50%; border: none; padding: 0; background: rgba(255,255,255,.4); cursor: pointer; }
+.hero-dots button.on { background: var(--orange); width: 22px; border-radius: 4px; }
+@media (max-width: 760px) {
+  .hero-slider { min-height: 420px; padding: 36px 0 70px; align-items: flex-start; }
+  .hero-shade { background: linear-gradient(180deg, rgba(7,42,53,.9) 0%, rgba(7,42,53,.7) 55%, rgba(7,42,53,.55) 100%); }
+  .hero-caption { bottom: -52px; }
+  .hero-dots { bottom: -50px; max-width: 45%; }
+}
+
+/* хямдрал */
+.old-price { color: var(--muted); font-weight: 500; font-size: .82em; text-decoration: line-through; }
+.new-price { color: #b4372f; }
+.sale-tag { display: inline-block; background: #b4372f; color: #fff; font-style: normal; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 5px; vertical-align: middle; }
+.price-big .sale-tag { font-size: 13px; }
+.badge.sale { background: #b4372f; }
+
+/* 24 цагийн анхааруулга */
+.hold-warn { background: #fff6e0; border: 1px solid #ecd28f; border-left: 4px solid var(--orange); color: #5b4511; border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.55; }
+.hold-warn a { color: var(--green); }
+.status-pill.expired, .tag.expired { background: #ececec; color: #555; }
+@media (max-width: 640px) {
+  .brand > span:last-child { font-size: 16px; letter-spacing: 1px; }
+  .brand .logo { width: 38px; height: 38px; }
+  .nav a:first-child { display: none; }
+  .hero-dots { display: none; }
+  .hero-slider { padding-bottom: 84px; }
+  .hero-caption { left: 0; right: auto; align-items: flex-start; text-align: left; bottom: -66px; }
+}
