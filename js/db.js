@@ -18,9 +18,18 @@ import { firebaseConfig } from './firebase-config.js';
 
 export const configured = !!firebaseConfig.projectId && !/YOUR_/.test(firebaseConfig.projectId);
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+// Config бөглөөгүй үед Firebase-ийг эхлүүлэхгүй (хуурамч apiKey-д getAuth алдаа шиддэг бөгөөд бүх хуудсыг зогсоодог)
+let app = null, db = null, auth = null, initError = null;
+if (configured) {
+  try { app = initializeApp(firebaseConfig); db = getFirestore(app); auth = getAuth(app); }
+  catch (e) { initError = e; console.error('Firebase init failed', e); }
+}
+function need() {
+  if (db) return;
+  throw new Error(initError
+    ? 'Firebase эхлүүлэхэд алдаа гарлаа: ' + (initError.message || initError) + '. js/firebase-config.js-ийг шалгана уу.'
+    : 'Firebase тохиргоо хийгдээгүй байна (js/firebase-config.js). README-ийн 1-р хэсгийг үзнэ үү.');
+}
 
 const DEFAULT_SETTINGS = {
   siteName: 'Морьтон Үржүүлэг',
@@ -85,17 +94,19 @@ let settingsCache = null;
 export async function getSettings() {
   if (settingsCache) return settingsCache;
   let data = {};
-  try { const snap = await getDoc(doc(db, 'settings', 'site')); if (snap.exists()) data = snap.data(); } catch (e) { /* дүрэм/сүлжээ — анхдагчаар */ }
+  if (db) try { const snap = await getDoc(doc(db, 'settings', 'site')); if (snap.exists()) data = snap.data(); } catch (e) { /* дүрэм/сүлжээ — анхдагчаар */ }
   settingsCache = Object.assign({}, DEFAULT_SETTINGS, data);
   return settingsCache;
 }
 export async function saveSettings(obj) {
+  need();
   await setDoc(doc(db, 'settings', 'site'), obj, { merge: true });
   settingsCache = null;
 }
 
 // ------------------------------------------------------------ public reads
 async function loadQueueAll() {
+  need();
   const snap = await getDocs(collection(db, 'queue'));
   return snap.docs.map(d => ({ code: d.id, ...d.data() }));
 }
@@ -109,11 +120,13 @@ function attachPending(stallions, queue) {
   });
 }
 export async function listStallions() {
+  need();
   const [snap, queue] = await Promise.all([getDocs(collection(db, 'stallions')), loadQueueAll()]);
   const list = snap.docs.map(d => ({ slug: d.id, ...d.data() })).sort((a, b) => (a.order || 99) - (b.order || 99));
   return attachPending(list, queue);
 }
 export async function getStallion(slug) {
+  need();
   const [snap, qsnap] = await Promise.all([
     getDoc(doc(db, 'stallions', slug)),
     getDocs(query(collection(db, 'queue'), where('stallion', '==', slug)))
@@ -127,6 +140,7 @@ export async function getStallion(slug) {
 
 // ------------------------------------------------------------ public booking
 export async function createBooking(input) {
+  need();
   const settings = await getSettings();
   const slug = cleanStr(input.stallion, 60);
   const snap = await getDoc(doc(db, 'stallions', slug));
@@ -157,6 +171,7 @@ export async function createBooking(input) {
   return code;
 }
 export async function getBooking(code) {
+  need();
   code = String(code || '').trim().toUpperCase();
   if (!/^GT-[A-Z0-9]{6}$/.test(code)) throw new Error('Кодын хэлбэр буруу байна (GT-XXXXXX)');
   const snap = await getDoc(doc(db, 'bookings', code));
@@ -168,12 +183,16 @@ export async function getBooking(code) {
 }
 
 // ------------------------------------------------------------ admin auth
-export function onAdmin(cb) { return onAuthStateChanged(auth, user => cb(user ? { uid: user.uid, email: user.email } : null)); }
-export async function login(email, password) { await signInWithEmailAndPassword(auth, email, password); }
-export async function logout() { await signOut(auth); }
+export function onAdmin(cb) {
+  if (!auth) { setTimeout(() => cb(null), 0); return () => {}; }
+  return onAuthStateChanged(auth, user => cb(user ? { uid: user.uid, email: user.email } : null));
+}
+export async function login(email, password) { need(); await signInWithEmailAndPassword(auth, email, password); }
+export async function logout() { if (auth) await signOut(auth); }
 
 // ------------------------------------------------------------ admin data
 export async function adminOverview() {
+  need();
   const stallions = await listStallions();
   const bsnap = await getDocs(collection(db, 'bookings'));
   const counts = { pending: 0, confirmed: 0, cancelled: 0, total: bsnap.size };
@@ -181,6 +200,7 @@ export async function adminOverview() {
   return { stallions, counts };
 }
 export async function listBookings() {
+  need();
   const snap = await getDocs(query(collection(db, 'bookings'), orderBy('createdAt', 'desc')));
   return snap.docs.map(d => ({ code: d.id, ...d.data() }));
 }
@@ -203,6 +223,7 @@ async function renumberQueue(slug) {
 }
 
 export async function confirmBooking(code) {
+  need();
   const bRef = doc(db, 'bookings', code);
   const result = await runTransaction(db, async tx => {
     const bs = await tx.get(bRef);
@@ -228,6 +249,7 @@ export async function confirmBooking(code) {
 }
 
 export async function cancelBooking(code, reason) {
+  need();
   const bRef = doc(db, 'bookings', code);
   let slug = null, wasConfirmed = false;
   await runTransaction(db, async tx => {
@@ -244,6 +266,7 @@ export async function cancelBooking(code, reason) {
 }
 
 export async function reopenBooking(code) {
+  need();
   const bRef = doc(db, 'bookings', code);
   let slug = null, wasConfirmed = false;
   await runTransaction(db, async tx => {
@@ -260,6 +283,7 @@ export async function reopenBooking(code) {
 }
 
 export async function updateStallion(slug, fields) {
+  need();
   const ref = doc(db, 'stallions', slug);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error('Азарга олдсонгүй');
@@ -280,6 +304,7 @@ export async function updateStallion(slug, fields) {
 }
 
 export async function importSeed(seed, capacity) {
+  need();
   // зөвхөн байхгүй азаргыг нэмнэ — байгаа бичлэгийн тоолуур/засварыг хөндөхгүй
   const snap = await getDocs(collection(db, 'stallions'));
   const existing = new Set(snap.docs.map(d => d.id));
