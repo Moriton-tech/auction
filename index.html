@@ -13,15 +13,18 @@
 <body>
 <header class="site-header" id="site-header"></header>
 <main>
-  <section class="hero">
+  <section class="hero hero-slider" id="hero">
+    <div class="hero-slides" id="hero-slides" aria-hidden="true"></div>
+    <div class="hero-shade"></div>
     <div class="container">
       <h1 id="hero-title">Үржүүлгийн азарганд гүү тавих захиалга</h1>
       <p id="hero-text">Дэлхийн шилдэг удмын цэвэр англи, цэвэр араб, англо-араб азаргануудаас сонгож гүүгээ бүртгүүлээрэй. Азарга бүр <b>10 гүү</b> хүлээн авна — баталгаажсан дарааллаар хавар гүүг азарганд тавина.</p>
-      <div class="stats" id="stats"></div>
       <form class="check" id="check-form">
         <input id="check-code" placeholder="Захиалгын код (GT-XXXXXX)" maxlength="12" autocomplete="off">
         <button class="btn btn-primary" type="submit">Шалгах</button>
       </form>
+      <a class="hero-caption" id="hero-caption" href="#azarga" hidden></a>
+      <div class="hero-dots" id="hero-dots"></div>
     </div>
   </section>
 
@@ -33,6 +36,7 @@
         <button class="chip" data-breed="Цэвэр араб">Цэвэр араб</button>
         <button class="chip" data-breed="Англо-Араб">Англо-Араб</button>
         <button class="chip" data-breed="open">Зөвхөн нээлттэй</button>
+        <button class="chip" data-breed="sale">Хямдралтай</button>
       </div>
       <select id="sort">
         <option value="catalog">Каталогийн дараалал</option>
@@ -49,7 +53,7 @@
 
 <script type="module">
 import { listStallions, friendlyError } from './js/db.js';
-import { esc, priceText, renderChrome, meterHtml, url, img } from './js/common.js';
+import { esc, priceHtml, renderChrome, meterHtml, url, img, lookupUrl } from './js/common.js';
 
 const cfg = await renderChrome('home');
 document.getElementById('hero-text').innerHTML = `Дэлхийн шилдэг удмын цэвэр англи, цэвэр араб, англо-араб азаргануудаас сонгож гүүгээ бүртгүүлээрэй. Азарга бүр <b>${cfg.defaultCapacity || 10} гүү</b> хүлээн авна — баталгаажсан дарааллаар ${esc(cfg.season || 'хавар')} гүүг азарганд тавина.`;
@@ -57,11 +61,43 @@ document.getElementById('hero-text').innerHTML = `Дэлхийн шилдэг у
 let all = [];
 let breed = 'all', sort = 'catalog';
 
+// ---------------- hero slider: азаргануудын зураг ээлжлэн солигдоно
+function startSlider(list) {
+  const slidesEl = document.getElementById('hero-slides');
+  const dotsEl = document.getElementById('hero-dots');
+  const cap = document.getElementById('hero-caption');
+  const items = list.filter(s => s.active !== false && s.images && s.images.main);
+  if (!items.length) return;
+  // санамсаргүй эхлэл, гэхдээ бүгдийг тойрно
+  const start = Math.floor(Math.random() * items.length);
+  const order = items.slice(start).concat(items.slice(0, start));
+  slidesEl.innerHTML = order.map((s, i) => `<div class="hero-slide${i === 0 ? ' on' : ''}" data-src="${img(s.images.main)}"${i === 0 ? ` style="background-image:url('${img(s.images.main)}')"` : ''}></div>`).join('');
+  dotsEl.innerHTML = order.map((s, i) => `<button class="${i === 0 ? 'on' : ''}" data-i="${i}" aria-label="${esc(s.name)}"></button>`).join('');
+  const slides = [...slidesEl.children], dots = [...dotsEl.children];
+  let cur = 0, timer = null;
+  const load = i => { const el = slides[i]; if (el && !el.style.backgroundImage) el.style.backgroundImage = `url('${el.dataset.src}')`; };
+  const show = i => {
+    cur = (i + order.length) % order.length;
+    load(cur); load((cur + 1) % order.length);
+    slides.forEach((el, k) => el.classList.toggle('on', k === cur));
+    dots.forEach((el, k) => el.classList.toggle('on', k === cur));
+    const s = order[cur];
+    cap.hidden = false;
+    cap.href = url.stallion(s.slug);
+    cap.innerHTML = `<b>${esc(s.name)} азарга</b><span>${esc(s.breed)} · ${priceHtml(s)}${Number(s.discount || 0) > 0 ? ` <em class="sale-tag">−${s.discount}%</em>` : ''}</span>`;
+  };
+  const play = () => { clearInterval(timer); timer = setInterval(() => show(cur + 1), 5000); };
+  dotsEl.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; show(Number(b.dataset.i)); play(); });
+  show(0); play();
+  document.addEventListener('visibilitychange', () => { if (document.hidden) clearInterval(timer); else play(); });
+}
+
 function render() {
   let list = all.filter(s => s.active !== false);
   if (breed === 'open') list = list.filter(s => s.stats.status === 'open');
+  else if (breed === 'sale') list = list.filter(s => Number(s.discount || 0) > 0);
   else if (breed !== 'all') list = list.filter(s => s.breed === breed);
-  const pv = s => s.price == null ? -1 : Number(s.price);
+  const pv = s => s.effectivePrice == null ? -1 : Number(s.effectivePrice);
   if (sort === 'price-desc') list.sort((a, b) => pv(b) - pv(a));
   else if (sort === 'price-asc') list.sort((a, b) => (pv(a) < 0 ? 1e9 : pv(a)) - (pv(b) < 0 ? 1e9 : pv(b)));
   else if (sort === 'remaining') list.sort((a, b) => b.stats.remaining - a.stats.remaining);
@@ -73,8 +109,10 @@ function render() {
   grid.innerHTML = list.map(s => {
     const st = s.stats;
     const full = st.status === 'full';
+    const sale = Number(s.discount || 0) > 0;
     const badge = full ? `<span class="badge full">Дүүрсэн ${st.confirmedMares}/${st.capacity}</span>`
-      : (st.remaining <= 3 ? `<span class="badge" style="background:var(--orange)">${st.remaining} суудал үлдлээ</span>` : '');
+      : sale ? `<span class="badge sale">−${s.discount}% хямдрал</span>`
+      : (st.remaining <= 3 ? `<span class="badge" style="background:var(--orange);color:var(--green-dark)">${st.remaining} суудал үлдлээ</span>` : '');
     return `<article class="card ${full ? 'full' : ''}">
       <a class="photo" href="${url.stallion(s.slug)}">
         <img src="${img(s.images.main, true)}" alt="${esc(s.name)}" loading="lazy">
@@ -82,7 +120,7 @@ function render() {
       </a>
       <div class="body">
         <h3><a href="${url.stallion(s.slug)}">${esc(s.name)} азарга</a><small>${esc(s.nameEn)}${s.foaled ? ' · ' + s.foaled + ' он' : ''}</small></h3>
-        <div class="price">${priceText(s.price)}<span>үржүүлгийн үнэ</span></div>
+        <div class="price">${priceHtml(s)}<span>үржүүлгийн үнэ</span></div>
         <div class="meta">Эцэг: ${esc(s.sire || '—')}</div>
         ${meterHtml(st)}
         <div class="actions">
@@ -98,14 +136,7 @@ try {
   if (!all.length) {
     document.getElementById('grid').innerHTML = `<div class="alert warn">Азарганы мэдээлэл хараахан ороогүй байна. <a href="${url.admin()}">Админ</a> хуудсанд нэвтэрч «Анхны тохиргоо» товчоор каталогийг импортлоно уу.</div>`;
   } else {
-    const open = all.filter(s => s.stats.status === 'open').length;
-    const full = all.filter(s => s.stats.status === 'full').length;
-    const confirmed = all.reduce((a, s) => a + s.stats.confirmedMares, 0);
-    document.getElementById('stats').innerHTML = `
-      <div class="stat"><b>${all.filter(s => s.active !== false).length}</b><span>азарга</span></div>
-      <div class="stat"><b>${open}</b><span>захиалга нээлттэй</span></div>
-      <div class="stat"><b>${full}</b><span>дүүрсэн</span></div>
-      <div class="stat"><b>${confirmed}</b><span>гүү баталгаажсан</span></div>`;
+    startSlider(all);
     render();
   }
 } catch (e) {
@@ -120,8 +151,8 @@ document.getElementById('chips').addEventListener('click', e => {
 document.getElementById('sort').addEventListener('change', e => { sort = e.target.value; render(); });
 document.getElementById('check-form').addEventListener('submit', e => {
   e.preventDefault();
-  const code = document.getElementById('check-code').value.trim().toUpperCase();
-  if (code) location.href = url.booking(code);
+  const u = lookupUrl(document.getElementById('check-code').value);
+  if (u) location.href = u;
 });
 </script>
 </body>
