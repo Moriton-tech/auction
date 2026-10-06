@@ -21,8 +21,8 @@
 <footer class="site-footer" id="site-footer"></footer>
 
 <script type="module">
-import { getStallion, createBooking, friendlyError } from './js/db.js';
-import { esc, priceText, renderChrome, meterHtml, lightbox, toast, url, img, param } from './js/common.js';
+import { getStallion, createBooking, friendlyError, HOLD_HOURS } from './js/db.js';
+import { esc, priceHtml, renderChrome, meterHtml, lightbox, toast, url, img, param } from './js/common.js';
 
 const cfg = await renderChrome();
 const slug = param('id') || '';
@@ -67,7 +67,7 @@ root.innerHTML = `
     <div class="panel info">
       <div class="title-row">
         <div><h1>${esc(s.name)} азарга</h1><div class="sub">${esc(s.nameEn)}${s.foaled ? ' · FOALED ' + s.foaled : ''}</div></div>
-        <div class="price-big">${priceText(s.price)}<small>үржүүлгийн үнэ${s.price == null ? ' — тохиролцоно' : ' ₮ / гүү'}</small></div>
+        <div class="price-big">${Number(s.discount || 0) > 0 ? `<span class="sale-tag">−${s.discount}%</span> ` : ''}${priceHtml(s)}<small>үржүүлгийн үнэ${s.price == null ? ' — тохиролцоно' : ' ₮ / гүү'}</small></div>
       </div>
       <div class="spec">
         <div><span>Үүлдэр</span><b>${esc(s.breed)}</b></div>
@@ -100,7 +100,8 @@ root.innerHTML = `
         <input class="hp" name="website" tabindex="-1" autocomplete="off">
         <div id="ferr"></div>
         <button class="btn btn-primary btn-block" type="submit" id="fbtn">Захиалга илгээх</button>
-        <p class="hint">Илгээснээр захиалгын код авна. Манай ажилтан утсаар холбогдож баталгаажуулсны дараа <b>баталгаажуулалтын маягт</b> үүснэ.</p>
+        <div class="hold-warn">⏱ Захиалга илгээснээс хойш <b>${HOLD_HOURS} цагийн дотор</b> баталгаажаагүй бол автоматаар устана. Баталгаажуулахын тулд <a href="tel:${esc(cfg.confirmPhone || '80881069')}"><b>${esc(cfg.confirmPhone || '80881069')}</b></a> дугаарт холбогдоорой.</div>
+        <p class="hint">Илгээснээр захиалгын код авна. Энэ кодоор захиалгаа шалгана. Баталгаажсаны дараа <b>баталгаажуулалтын маягт</b> үүснэ.</p>
       </form>`}
     </div>
 </div>`;
