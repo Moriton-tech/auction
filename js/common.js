@@ -1,5 +1,5 @@
 /* Нийтлэг туслах функцууд (UI) */
-import { getSettings, configured, toDate } from './db.js';
+import { getSettings, configured, toDate, effectivePrice } from './db.js';
 
 export const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -20,7 +20,25 @@ export const fmtDay = v => {
   return `${d.getFullYear()} оны ${d.getMonth() + 1} сарын ${d.getDate()}`;
 };
 
-export const statusMn = s => ({ pending: 'Хүлээгдэж байна', confirmed: 'Баталгаажсан', cancelled: 'Цуцлагдсан' }[s] || s);
+export const statusMn = s => ({ pending: 'Хүлээгдэж байна', confirmed: 'Баталгаажсан', cancelled: 'Цуцлагдсан', expired: 'Хугацаа дууссан' }[s] || s);
+
+const fmtM = n => (Number.isInteger(n) ? n : Number(n).toFixed(2).replace(/\.?0+$/, '')) + ' сая';
+// Үнийг хямдралтай нь харуулах HTML: <s>8 сая</s> 6.4 сая  (Private бол «Private»)
+export function priceHtml(s, withUnit) {
+  if (!s || s.price == null || s.price === '') return 'Private';
+  const p = effectivePrice(s), u = withUnit ? ' ₮' : '';
+  if (Number(s.discount || 0) > 0) return `<s class="old-price">${fmtM(Number(s.price))}</s> <span class="new-price">${fmtM(p)}${u}</span>`;
+  return fmtM(p) + u;
+}
+export const fmtMillion = fmtM;
+
+// Хайлтын талбар: GT- код → zahialga.html
+export function lookupUrl(v) {
+  v = String(v || '').trim().toUpperCase();
+  if (!v) return null;
+  if (/^GT-?[A-Z0-9]{6}$/.test(v)) v = v.replace(/^GT-?/, 'GT-');
+  return 'zahialga.html?code=' + encodeURIComponent(v);
+}
 
 export const LOGO = '<span class="brand-mark"></span>';
 
@@ -43,8 +61,7 @@ export async function renderChrome(active) {
     <a class="brand" href="${url.home()}"><span class="logo">${LOGO}</span><span>${esc(c.siteName)}<small>${esc(c.siteTagline)}</small></span></a>
     <nav class="nav">
       <a href="${url.home()}" class="${active === 'home' ? 'active' : ''}">Азарганууд</a>
-      <a href="zahialga.html" class="hide-sm">Захиалга шалгах</a>
-      <a href="${url.home()}#azarga" class="btn-accent">Гүү тавих захиалга</a>
+      <a href="zahialga.html">Захиалга шалгах</a>
     </nav></div>`;
   const f = document.getElementById('site-footer');
   if (f) f.innerHTML = `<div class="container">
