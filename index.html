@@ -16,16 +16,21 @@
   <section class="hero hero-slider" id="hero">
     <div class="hero-slides" id="hero-slides" aria-hidden="true"></div>
     <div class="hero-shade"></div>
-    <div class="container">
-      <h1 id="hero-title">Үржүүлгийн азарганд гүү тавих захиалга</h1>
-      <p id="hero-text">Дэлхийн шилдэг удмын цэвэр англи, цэвэр араб, англо-араб азаргануудаас сонгож гүүгээ бүртгүүлээрэй. Азарга бүр <b>10 гүү</b> хүлээн авна — баталгаажсан дарааллаар хавар гүүг азарганд тавина.</p>
-      <form class="check" id="check-form">
-        <input id="check-code" placeholder="Захиалгын код (GT-XXXXXX)" maxlength="12" autocomplete="off">
-        <button class="btn btn-primary" type="submit">Шалгах</button>
-      </form>
+    <div class="hero-bar container">
       <a class="hero-caption" id="hero-caption" href="#azarga" hidden></a>
       <div class="hero-dots" id="hero-dots"></div>
     </div>
+  </section>
+
+  <section class="intro container">
+    <div class="intro-text">
+      <h1 id="hero-title">Үржүүлгийн азарганд гүү тавих захиалга</h1>
+      <p id="hero-text">Дэлхийн шилдэг удмын цэвэр англи, цэвэр араб, англо-араб азаргануудаас сонгож гүүгээ бүртгүүлээрэй. Азарга бүр <b>10 гүү</b> хүлээн авна — баталгаажсан дарааллаар хавар гүүг азарганд тавина.</p>
+    </div>
+    <form class="check" id="check-form">
+      <input id="check-code" placeholder="Захиалгын код (GT-XXXXXX)" maxlength="12" autocomplete="off">
+      <button class="btn btn-primary" type="submit">Шалгах</button>
+    </form>
   </section>
 
   <div class="container" id="azarga">
@@ -62,6 +67,7 @@ let all = [];
 let breed = 'all', sort = 'catalog';
 
 // ---------------- hero slider: азаргануудын зураг ээлжлэн солигдоно
+const abs = p => new URL(p, location.href).href; // CSS хувьсагч дахь url() нь css/ хавтаснаас биш хуудаснаас шийдэгдэх ёстой
 function startSlider(list) {
   const slidesEl = document.getElementById('hero-slides');
   const dotsEl = document.getElementById('hero-dots');
@@ -71,11 +77,11 @@ function startSlider(list) {
   // санамсаргүй эхлэл, гэхдээ бүгдийг тойрно
   const start = Math.floor(Math.random() * items.length);
   const order = items.slice(start).concat(items.slice(0, start));
-  slidesEl.innerHTML = order.map((s, i) => `<div class="hero-slide${i === 0 ? ' on' : ''}" data-src="${img(s.images.main)}"${i === 0 ? ` style="background-image:url('${img(s.images.main)}')"` : ''}></div>`).join('');
+  slidesEl.innerHTML = order.map((s, i) => `<div class="hero-slide${i === 0 ? ' on' : ''}" data-src="${abs(img(s.images.main))}"${i === 0 ? ` style="--img:url('${abs(img(s.images.main))}')"` : ''}></div>`).join('');
   dotsEl.innerHTML = order.map((s, i) => `<button class="${i === 0 ? 'on' : ''}" data-i="${i}" aria-label="${esc(s.name)}"></button>`).join('');
   const slides = [...slidesEl.children], dots = [...dotsEl.children];
   let cur = 0, timer = null;
-  const load = i => { const el = slides[i]; if (el && !el.style.backgroundImage) el.style.backgroundImage = `url('${el.dataset.src}')`; };
+  const load = i => { const el = slides[i]; if (el && !el.style.getPropertyValue('--img')) el.style.setProperty('--img', `url('${el.dataset.src}')`); };
   const show = i => {
     cur = (i + order.length) % order.length;
     load(cur); load((cur + 1) % order.length);
