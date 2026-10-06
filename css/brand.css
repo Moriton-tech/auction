@@ -1,0 +1,51 @@
+/* Морьтон брэнд — лого, өнгө (style.css-ийг дарж бичнэ) */
+:root {
+  --green: #0b3a48;        /* Морьтон хар номин */
+  --green-dark: #072a35;
+  --green-light: #e2eef0;
+  --orange: #c9a24a;       /* Морьтон алт */
+  --orange-dark: #a9852f;
+  --gold-light: #d4b665;
+  --cream: #f4f2ec;
+  --logo-gold: url("data:image/png;base64,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");
+}
+.brand-mark { display: block; width: 100%; height: 100%; background: var(--logo-gold) center / contain no-repeat; }
+
+/* толгой */
+.site-header { background: var(--green-dark); border-bottom: 2px solid var(--orange); }
+.brand .logo { background: none; width: 46px; height: 46px; border-radius: 0; }
+.brand > span:last-child { color: var(--gold-light); font-weight: 800; font-size: 19px; letter-spacing: 1.5px; text-transform: uppercase; line-height: 1.1; }
+.brand small { color: #e9e4d4; font-weight: 500; font-size: 11.5px; letter-spacing: .3px; text-transform: none; margin-top: 2px; opacity: .9; }
+.nav a.btn-accent { background: var(--orange); color: var(--green-dark); }
+.nav a.btn-accent:hover { background: var(--gold-light); }
+
+/* hero */
+.hero { background: radial-gradient(circle at 85% 30%, rgba(201,162,74,.16), transparent 45%), linear-gradient(135deg, var(--green-dark), var(--green) 70%); position: relative; overflow: hidden; }
+.hero::after { content: ""; position: absolute; right: -40px; top: 50%; width: 300px; height: 300px; transform: translateY(-50%); background: var(--logo-gold) center / contain no-repeat; opacity: .12; pointer-events: none; }
+@media (max-width: 760px) { .hero::after { width: 200px; height: 200px; right: -60px; opacity: .08; } }
+.hero .container { position: relative; z-index: 1; }
+.hero h1 { color: #fff; }
+.hero h1::after { content: ""; display: block; width: 64px; height: 3px; background: var(--orange); margin-top: 12px; border-radius: 2px; }
+.stat { border-color: rgba(212,182,101,.35); }
+.stat b { color: var(--gold-light); }
+
+/* товчнууд: алтан дээр хар номин бичиг */
+.btn-primary { background: var(--orange); color: var(--green-dark); }
+.btn-primary:hover { background: var(--gold-light); }
+.chip.active { background: var(--green); border-color: var(--green); }
+.badge.breed { background: rgba(7,42,53,.78); }
+.card .price { color: var(--green); }
+.price-big { color: var(--green); }
+.tabs button.active { border-color: var(--orange); }
+
+/* маягт */
+.cert .head { border-bottom-color: var(--orange); }
+.cert .org .logo { background: var(--green); padding: 5px; }
+.cert h2 { color: var(--green); }
+.cert .stamp { border-color: var(--orange-dark); color: var(--orange-dark); }
+.cert .queue-big { background: #f6efdc; }
+.cert .queue-big b { color: var(--green); }
+
+/* хөл */
+.site-footer { background: var(--green-dark); border-top: 2px solid var(--orange); }
+.site-footer b { color: var(--gold-light); }
