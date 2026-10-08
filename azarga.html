@@ -99,9 +99,9 @@ root.innerHTML = `
         <div><label>Нэмэлт тайлбар</label><input class="input" name="note" maxlength="500"></div>
         <input class="hp" name="website" tabindex="-1" autocomplete="off">
         <div id="ferr"></div>
-        <button class="btn btn-primary btn-block" type="submit" id="fbtn">Захиалга илгээх</button>
-        <div class="hold-warn">⏱ Захиалга илгээснээс хойш <b>${HOLD_HOURS} цагийн дотор</b> баталгаажаагүй бол автоматаар устана. Баталгаажуулахын тулд <a href="tel:${esc(cfg.confirmPhone || '80881069')}"><b>${esc(cfg.confirmPhone || '80881069')}</b></a> дугаарт холбогдоорой.</div>
-        <p class="hint">Илгээснээр захиалгын код авна. Энэ кодоор захиалгаа шалгана. Баталгаажсаны дараа <b>баталгаажуулалтын маягт</b> үүснэ.</p>
+        <button class="btn btn-primary btn-block" type="submit" id="fbtn">Захиалах → Төлбөр төлөх</button>
+        <div class="hold-warn">⏱ Захиалга илгээсний дараа <b>дансаар төлөх заавар</b> гарна. <b>${HOLD_HOURS} цагийн дотор</b> төлбөр баталгаажаагүй бол захиалга автоматаар устана. Асуух зүйл байвал <a href="tel:${esc(cfg.confirmPhone || '80881069')}"><b>${esc(cfg.confirmPhone || '80881069')}</b></a> дугаарт холбогдоорой.</div>
+        <p class="hint">Илгээснээр захиалгын код авна — энэ код нь төлбөрийн <b>гүйлгээний утга</b> болно. Төлбөр баталгаажсаны дараа <b>баталгаажуулалтын маягт</b> үүснэ.</p>
       </form>`}
     </div>
 </div>`;
@@ -126,7 +126,7 @@ if (form) form.addEventListener('submit', async e => {
     location.href = url.booking(code) + '&new=1';
   } catch (err) {
     errBox.innerHTML = `<div class="alert error">${esc(friendlyError(err))}</div>`;
-    btn.disabled = false; btn.textContent = 'Захиалга илгээх';
+    btn.disabled = false; btn.textContent = 'Захиалах → Төлбөр төлөх';
   }
 });
 if (location.hash === '#zahialga') document.getElementById('zahialga').scrollIntoView({ behavior: 'smooth' });
