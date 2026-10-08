@@ -73,7 +73,14 @@ service cloud.firestore {
       allow get: if true;
       allow list: if isAdmin();
       allow create: if isAdmin() || validBooking(code);
-      allow update, delete: if isAdmin();
+      // Захиалагч «Шилжүүлсэн» гэж тэмдэглэх: зөвхөн хүлээгдэж буй захиалгад, зөвхөн 2 талбар
+      allow update: if isAdmin() || (
+        resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['transferClaimedAt', 'payerName'])
+        && request.resource.data.transferClaimedAt == request.time
+        && (!('payerName' in request.resource.data) || (request.resource.data.payerName is string && request.resource.data.payerName.size() <= 80))
+      );
+      allow delete: if isAdmin();
     }
   }
 }
