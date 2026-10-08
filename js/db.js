@@ -44,6 +44,11 @@ const DEFAULT_SETTINGS = {
   phone: '80881069',
   confirmPhone: '80881069',
   notifyEmail: 'munkhtsetseg@moriton.mn',
+  // Дансаар төлөх мэдээлэл (Админ → Тохиргоо)
+  bankName: '',
+  bankAccount: '',
+  bankHolder: '',
+  bankIban: '',
   address: 'Хүй 7, Төв аймаг',
   season: '2027 оны хавар',
   defaultCapacity: 10,
@@ -233,6 +238,52 @@ export async function notifyNewBooking(b, s, settings) {
     return r.ok;
   } catch (e) { console.warn('Имэйл илгээж чадсангүй', e); return false; }
 }
+
+// Төлөх дүн (₮): хямдралтай үнэ × гүүний тоо; Private бол null
+export function bookingAmount(b, s) {
+  const unit = b && b.unitPrice !== undefined && b.unitPrice !== null ? Number(b.unitPrice) : effectivePrice(s);
+  if (unit == null || !isFinite(unit)) return null;
+  return Math.round(unit * 1e6) * Number(b.mares || 1);
+}
+
+// Захиалагч «Шилжүүлсэн» товч дарах: захиалга дээр тэмдэглэж (дүрэм зөвшөөрвөл), админд имэйл илгээнэ
+export async function claimTransfer(b, payerName) {
+  need();
+  const payer = cleanStr(payerName, 80);
+  let saved = false;
+  try {
+    const upd = { transferClaimedAt: serverTimestamp() };
+    if (payer) upd.payerName = payer;
+    await updateDoc(doc(db, 'bookings', b.code), upd);
+    saved = true;
+  } catch (e) { console.warn('claim save', e); }
+  try { localStorage.setItem('claim:' + b.code, new Date().toISOString()); } catch (e) { /* хувийн цонх */ }
+  const settings = await getSettings();
+  const s = b.stallionData || { name: b.stallion };
+  const amt = bookingAmount(b, s);
+  const to = (settings.notifyEmail || '').trim();
+  let mailed = false;
+  if (to) {
+    try {
+      const r = await fetch('https://formsubmit.co/ajax/' + encodeURIComponent(to), {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          _subject: `💳 Дансаар шилжүүлсэн: ${b.code} — ${b.ownerName} (${amt == null ? 'тохиролцоно' : amt.toLocaleString('en-US') + '₮'})`,
+          _template: 'table', _captcha: 'false',
+          'Захиалгын код (гүйлгээний утга)': b.code,
+          'Азарга': s.name, 'Захиалагч': b.ownerName, 'Утас': b.phone, 'Гүүний тоо': b.mares,
+          'Төлөх дүн': amt == null ? 'Private — тохиролцоно' : amt.toLocaleString('en-US') + '₮',
+          'Шилжүүлэгчийн нэр': payer || '—',
+          'Анхааруулга': 'Дансны хуулгаа шалгаад админ хуудаснаас баталгаажуулна уу.',
+          'Холбоос': location.origin + location.pathname.replace(/[^/]*$/, '') + 'zahialga.html?code=' + b.code
+        })
+      });
+      mailed = r.ok;
+    } catch (e) { console.warn('claim mail', e); }
+  }
+  return { saved, mailed };
+}
+export function localClaim(code) { try { return localStorage.getItem('claim:' + code); } catch (e) { return null; } }
 
 export async function getBooking(code) {
   need();
