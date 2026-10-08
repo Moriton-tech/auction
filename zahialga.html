@@ -20,7 +20,7 @@
 
 <script src="js/vendor/qrcode.js"></script>
 <script type="module">
-import { getBooking, friendlyError, holdDeadline, HOLD_HOURS } from './js/db.js';
+import { getBooking, friendlyError, holdDeadline, HOLD_HOURS, bookingAmount, claimTransfer, localClaim, effectivePrice } from './js/db.js';
 import { esc, priceHtml, fmtMillion, fmtDate, fmtDay, statusMn, renderChrome, LOGO, url, img, param, toast } from './js/common.js';
 
 const cfg = await renderChrome();
@@ -53,6 +53,38 @@ if (!code) {
     <div class="muted small">Захиалсан: ${fmtDate(b.createdAt)}</div>
   </div>`;
 
+  const amount = bookingAmount(b, s);
+  const unit = effectivePrice(s);
+  const claimedAt = b.transferClaimedAt || localClaim(b.code);
+  const money = n => Number(n).toLocaleString('en-US') + '₮';
+  const copyBtn = v => `<button type="button" class="copy-btn" data-copy="${esc(v)}">Хуулах</button>`;
+  const row = (label, value, copy) => value ? `<div class="pay-row"><span>${label}</span><b>${esc(value)}</b>${copy ? copyBtn(copy) : ''}</div>` : '';
+  function payBox() {
+    const hasBank = !!(cfg.bankAccount || '').trim();
+    return `<div class="pay-box">
+      <h3>💳 Төлбөр төлөх — дансаар</h3>
+      <div class="pay-amount"><span>Төлөх дүн</span><b>${amount == null ? 'Утсаар тохиролцоно' : money(amount)}</b>${amount == null ? '' : `<small>${unit} сая × ${b.mares} гүү</small>`}</div>
+      ${hasBank ? `<div class="pay-rows">
+        ${row('Банк', cfg.bankName)}
+        ${row('Дансны дугаар', cfg.bankAccount, String(cfg.bankAccount).replace(/\s/g, ''))}
+        ${row('Хүлээн авагч', cfg.bankHolder, cfg.bankHolder)}
+        ${row('IBAN', cfg.bankIban, String(cfg.bankIban || '').replace(/\s/g, ''))}
+        ${amount == null ? '' : row('Дүн', money(amount), String(amount))}
+        <div class="pay-row ref"><span>Гүйлгээний утга</span><b>${esc(b.code)}</b>${copyBtn(b.code)}</div>
+      </div>
+      <ol class="pay-steps">
+        <li>Банкны аппаа нээж дээрх данс руу <b>${amount == null ? 'тохиролцсон дүнг' : money(amount)}</b> шилжүүлнэ.</li>
+        <li>Гүйлгээний утга дээр <b>${esc(b.code)}</b> кодыг заавал бичнэ.</li>
+        <li>Шилжүүлсний дараа доорх <b>«Шилжүүлсэн»</b> товчийг дарна.</li>
+        <li>Манай ажилтан хуулгыг шалгаж баталгаажуулмагц энэ хуудсанд <b>баталгаажуулалтын маягт</b> гарна.</li>
+      </ol>` : `<div class="alert warn">Дансны мэдээллийг <a href="tel:${esc(confirmPhone)}"><b>${esc(confirmPhone)}</b></a> дугаараас лавлана уу. Гүйлгээний утга дээр <b>${esc(b.code)}</b> кодыг бичнэ.</div>`}
+      <div id="claim-area">${claimedAt
+        ? `<div class="alert ok">✓ Та шилжүүлсэн гэж мэдэгдсэн${b.payerName ? ' (' + esc(b.payerName) + ')' : ''}. Ажилтан шалгаж баталгаажуулахыг хүлээнэ үү — энэ хуудас өөрөө шинэчлэгдэнэ.</div>`
+        : `<form class="claim-form" id="claim-form"><input class="input" id="payer" maxlength="80" placeholder="Шилжүүлсэн хүний нэр (заавал биш)"><button class="btn btn-primary" type="submit">✓ Шилжүүлсэн</button></form>`}</div>
+      <div class="hold-warn" style="margin-top:12px">⏱ <b>${HOLD_HOURS} цагийн дотор</b> төлбөр баталгаажаагүй бол захиалга автоматаар устана. Үлдсэн хугацаа: <b id="countdown">—</b><br>Асуулт байвал <a href="tel:${esc(confirmPhone)}"><b>${esc(confirmPhone)}</b></a> дугаарт холбогдоорой.</div>
+    </div>`;
+  }
+
   const summary = `<div class="panel no-print" style="max-width:760px;margin:10px auto 30px">
     <div style="display:flex;gap:14px;align-items:center;margin:0 0 14px">
       <img src="${img(mainKey, true)}" style="width:120px;height:90px;object-fit:cover;border-radius:8px" alt="">
@@ -66,8 +98,7 @@ if (!code) {
       <div style="grid-column:1/-1"><span>Гүүний мэдээлэл</span><b>${esc(b.mareInfo || '—')}</b></div>
       ${b.note ? `<div style="grid-column:1/-1"><span>Тайлбар</span><b>${esc(b.note)}</b></div>` : ''}
     </div>
-    ${ds === 'pending' ? `<div class="hold-warn" style="margin-top:14px">⏱ Энэ захиалга <b>${HOLD_HOURS} цагийн дотор</b> баталгаажаагүй бол автоматаар устана. Үлдсэн хугацаа: <b id="countdown">—</b><br>Баталгаажуулахын тулд манай <a href="tel:${esc(confirmPhone)}"><b>${esc(confirmPhone)}</b></a> дугаарт холбогдоорой.</div>
-      <div class="alert warn" style="margin-top:10px">Баталгаажсаны дараа энэ хуудсанд баталгаажуулалтын маягт гарна.</div>` : ''}
+    ${ds === 'pending' ? payBox() : ''}
     ${ds === 'expired' ? `<div class="alert error" style="margin-top:14px">Энэ захиалга ${HOLD_HOURS} цагийн дотор баталгаажаагүй тул <b>хугацаа нь дууссан</b>. Дахин захиалах эсвэл <a href="tel:${esc(confirmPhone)}"><b>${esc(confirmPhone)}</b></a> дугаарт холбогдоорой.</div>` : ''}
     ${b.status === 'cancelled' ? `<div class="alert error" style="margin-top:14px">Захиалга цуцлагдсан${b.cancelReason ? ': ' + esc(b.cancelReason) : ''}. Асуулт байвал ${esc(cfg.phone || '')} дугаарт холбогдоно уу.</div>` : ''}
   </div>`;
@@ -96,7 +127,7 @@ if (!code) {
           <div class="kv" style="margin-top:10px"><span>Үүлдэр</span><div>${esc(s.breed || '')}</div><span>Эцэг</span><div>${esc(s.sire || '—')}</div><span>Эх</span><div>${esc(s.dam || '—')}</div><span>Үржүүлгийн үнэ</span><div>${unitHtml}</div></div>
         </div>
         <div class="box"><h4>Захиалагч</h4>
-          <div class="kv"><span>Нэр</span><div><b>${esc(b.ownerName)}</b></div><span>Утас</span><div>${esc(b.phone)}</div><span>Байршил</span><div>${esc(b.location || '—')}</div><span>Гүүний тоо</span><div><b>${b.mares}</b></div><span>Гүүний мэдээлэл</span><div>${esc(b.mareInfo || '—')}</div><span>Нийт төлбөр</span><div><b>${total}</b></div></div>
+          <div class="kv"><span>Нэр</span><div><b>${esc(b.ownerName)}</b></div><span>Утас</span><div>${esc(b.phone)}</div><span>Байршил</span><div>${esc(b.location || '—')}</div><span>Гүүний тоо</span><div><b>${b.mares}</b></div><span>Гүүний мэдээлэл</span><div>${esc(b.mareInfo || '—')}</div><span>Нийт төлбөр</span><div><b>${total}</b> <span class="paid-tag">✓ Төлөгдсөн</span></div></div>
         </div>
       </div>
       <div class="queue-big"><b>${q} / ${s.capacity || cfg.defaultCapacity || 10}</b><span>Азарганд тавих дараалал (${esc(cfg.season || '')}) · Захиалсан: ${fmtDate(b.createdAt)} · Баталгаажсан: ${fmtDate(b.confirmedAt)}</span></div>
@@ -110,6 +141,26 @@ if (!code) {
   }
 
   root.innerHTML = head + summary + cert;
+  document.querySelectorAll('.copy-btn').forEach(btn => btn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(btn.dataset.copy); } catch (e) {
+      const t = document.createElement('textarea'); t.value = btn.dataset.copy; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove();
+    }
+    const o = btn.textContent; btn.textContent = '✓ Хуулсан'; btn.classList.add('done'); setTimeout(() => { btn.textContent = o; btn.classList.remove('done'); }, 1500);
+  }));
+  const cf = document.getElementById('claim-form');
+  if (cf) cf.addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = cf.querySelector('button'); btn.disabled = true; btn.textContent = 'Илгээж байна…';
+    try {
+      await claimTransfer(b, document.getElementById('payer').value);
+      document.getElementById('claim-area').innerHTML = `<div class="alert ok">✓ Мэдэгдэл илгээгдлээ. Ажилтан хуулгыг шалгаж баталгаажуулахыг хүлээнэ үү — энэ хуудас өөрөө шинэчлэгдэнэ.</div>`;
+      toast('Мэдэгдэл илгээгдлээ');
+    } catch (err) { btn.disabled = false; btn.textContent = '✓ Шилжүүлсэн'; toast(friendlyError(err)); }
+  });
+  // Төлбөр хүлээж байх үед 30 секунд тутам шалгаж, баталгаажмагц хуудсыг шинэчилнэ
+  if (ds === 'pending') setInterval(async () => {
+    try { const nb = await getBooking(b.code); if (nb.status !== 'pending') location.reload(); } catch (e) { /* сүлжээ */ }
+  }, 30000);
   const cd = document.getElementById('countdown');
   const dl = holdDeadline(b);
   if (cd && dl) {
