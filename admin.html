@@ -19,8 +19,9 @@
 <footer class="site-footer" id="site-footer"></footer>
 <div class="modal-bg" id="modal-bg"><div class="modal" id="modal"></div></div>
 
+<script src="js/vendor/qrcode.js"></script>
 <script type="module">
-import { onAdmin, login, logout, adminOverview, listBookings, confirmBooking, cancelBooking, reopenBooking, updateStallion, importSeed, getSettings, saveSettings, friendlyError, toDate, adminMaintenance, notifyNewBooking, effectivePrice } from './js/db.js';
+import { onAdmin, login, logout, adminOverview, listBookings, confirmBooking, cancelBooking, reopenBooking, updateStallion, importSeed, getSettings, saveSettings, friendlyError, toDate, adminMaintenance, notifyNewBooking, effectivePrice, bookingAmount } from './js/db.js';
 import { esc, priceHtml, fmtDate, statusMn, renderChrome, meterHtml, toast, url, img } from './js/common.js';
 
 await renderChrome();
@@ -77,7 +78,7 @@ function renderShell() {
     <div class="kpi"><b>${overview.stallions.reduce((a, s) => a + s.stats.confirmedMares, 0)}</b><span>Баталгаажсан гүү (нийт)</span></div>
     <div class="kpi"><b>${overview.stallions.filter(s => s.stats.status === 'full').length} / ${overview.stallions.length}</b><span>Дүүрсэн азарга</span></div>
   </div>
-  <div class="tabs"><button data-t="bookings" class="${tab === 'bookings' ? 'active' : ''}">Захиалгууд</button><button data-t="stallions" class="${tab === 'stallions' ? 'active' : ''}">Азарганууд</button><button data-t="settings" class="${tab === 'settings' ? 'active' : ''}">Тохиргоо</button></div>
+  <div class="tabs"><button data-t="bookings" class="${tab === 'bookings' ? 'active' : ''}">Захиалгууд</button><button data-t="stallions" class="${tab === 'stallions' ? 'active' : ''}">Азарганууд</button><button data-t="settings" class="${tab === 'settings' ? 'active' : ''}">Тохиргоо</button><button data-t="poster" class="${tab === 'poster' ? 'active' : ''}">QR постер</button></div>
   <div id="tabc"></div>`;
   document.getElementById('logout').addEventListener('click', () => logout());
   document.getElementById('csv').addEventListener('click', exportCsv);
@@ -92,7 +93,8 @@ function renderShell() {
     } catch (e) { toast(friendlyError(e)); imp.disabled = false; imp.textContent = 'Анхны тохиргоо — азарга импортлох'; }
   });
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { tab = b.dataset.t; renderShell(); }));
-  if (tab === 'bookings') renderBookings(); else if (tab === 'stallions') renderStallions(); else renderSettings();
+  document.body.classList.toggle('poster-mode', tab === 'poster');
+  if (tab === 'bookings') renderBookings(); else if (tab === 'stallions') renderStallions(); else if (tab === 'poster') renderPoster(); else renderSettings();
 }
 
 // ---------- bookings
@@ -105,7 +107,7 @@ let allBookings = [];
 async function renderBookings() {
   const el = document.getElementById('tabc');
   el.innerHTML = `<div class="filters">
-    <select class="input" id="f-status"><option value="pending">Хүлээгдэж буй</option><option value="confirmed">Баталгаажсан</option><option value="cancelled">Цуцлагдсан</option><option value="expired">Хугацаа дууссан</option><option value="all">Бүгд</option></select>
+    <select class="input" id="f-status"><option value="pending">Хүлээгдэж буй</option><option value="claimed">💳 Шилжүүлсэн — шалгах</option><option value="confirmed">Баталгаажсан</option><option value="cancelled">Цуцлагдсан</option><option value="expired">Хугацаа дууссан</option><option value="all">Бүгд</option></select>
     <select class="input" id="f-stallion"><option value="all">Бүх азарга</option>${overview.stallions.map(s => `<option value="${s.slug}">${esc(s.name)} (${s.stats.confirmedMares}/${s.stats.capacity})</option>`).join('')}</select>
     <input class="input" id="f-q" placeholder="Нэр, утас, код хайх…" value="${esc(filt.q)}">
     <button class="btn btn-light btn-sm" id="f-reload">⟳ Шинэчлэх</button></div>
@@ -122,22 +124,23 @@ async function renderBookings() {
 function drawBookings() {
   const wrap = document.getElementById('btable'); if (!wrap) return;
   let list = allBookings.slice();
-  if (filt.status !== 'all') list = list.filter(b => b.displayStatus === filt.status);
+  if (filt.status === 'claimed') list = list.filter(b => b.displayStatus === 'pending' && b.transferClaimedAt);
+  else if (filt.status !== 'all') list = list.filter(b => b.displayStatus === filt.status);
   if (filt.stallion !== 'all') list = list.filter(b => b.stallion === filt.stallion);
   const q = filt.q.toLowerCase();
   if (q) list = list.filter(b => [b.ownerName, b.phone, b.code, b.location, b.mareInfo].join(' ').toLowerCase().includes(q));
   if (!list.length) { wrap.innerHTML = '<p class="muted" style="padding:20px">Захиалга алга.</p>'; return; }
-  wrap.innerHTML = `<table class="tbl"><thead><tr><th>Код</th><th>Төлөв</th><th>Азарга</th><th>Захиалагч</th><th>Гүү</th><th>Мэдээлэл</th><th>Огноо</th><th>Үйлдэл</th></tr></thead><tbody>
+  wrap.innerHTML = `<table class="tbl"><thead><tr><th>Код</th><th>Төлөв</th><th>Азарга</th><th>Захиалагч</th><th>Гүү / дүн</th><th>Мэдээлэл</th><th>Огноо</th><th>Үйлдэл</th></tr></thead><tbody>
     ${list.map(b => {
       const st = overview.stallions.find(s => s.slug === b.stallion);
       const rem = st ? st.stats.remaining : 0;
       const qn = b.queueFrom ? `<div class="small muted">Дараалал ${b.queueFrom === b.queueTo ? b.queueFrom : b.queueFrom + '–' + b.queueTo}</div>` : '';
       return `<tr>
         <td class="mono"><a href="${url.booking(b.code)}" target="_blank">${esc(b.code)}</a></td>
-        <td><span class="tag ${b.displayStatus}">${statusMn(b.displayStatus)}</span>${qn}${b.displayStatus === 'pending' ? `<div class="small muted">${hoursLeft(b)}</div>` : ''}</td>
+        <td><span class="tag ${b.displayStatus}">${statusMn(b.displayStatus)}</span>${qn}${b.displayStatus === 'pending' ? `<div class="small muted">${hoursLeft(b)}</div>` : ''}${b.displayStatus === 'pending' && b.transferClaimedAt ? `<div class="claim-tag">💳 Шилжүүлсэн${b.payerName ? ': ' + esc(b.payerName) : ''}<br><span>${fmtDate(b.transferClaimedAt)}</span></div>` : ''}</td>
         <td><b>${esc(st ? st.name : b.stallion)}</b><div class="small muted">${st ? st.stats.confirmedMares + '/' + st.stats.capacity + ' · ' + rem + ' үлдсэн' : ''}</div></td>
         <td><b>${esc(b.ownerName)}</b><div class="small"><a href="tel:${esc(b.phone)}">${esc(b.phone)}</a></div><div class="small muted">${esc(b.location || '')}</div></td>
-        <td style="text-align:center"><b>${b.mares}</b></td>
+        <td style="text-align:center"><b>${b.mares}</b>${(() => { const a = bookingAmount(b, st); return a == null ? '<div class="small muted">тохиролцоно</div>' : `<div class="small muted" style="white-space:nowrap">${a.toLocaleString('en-US')}₮</div>`; })()}</td>
         <td class="small">${esc(b.mareInfo || '')}${b.note ? `<div class="muted">${esc(b.note)}</div>` : ''}${b.cancelReason ? `<div style="color:var(--red)">Цуцалсан: ${esc(b.cancelReason)}</div>` : ''}</td>
         <td class="small">${fmtDate(b.createdAt)}${b.confirmedAt ? `<div class="muted">Батл: ${fmtDate(b.confirmedAt)}</div>` : ''}</td>
         <td><div class="row-actions">
@@ -154,8 +157,10 @@ async function action(act, code, b) {
   const st = overview.stallions.find(s => s.slug === b.stallion);
   const name = `${b.ownerName} — ${st ? st.name : b.stallion} (${b.mares} гүү)`;
   if (act === 'confirm') {
+    const amt = bookingAmount(b, st);
     openModal(`<h3>Захиалга баталгаажуулах</h3><p>${esc(name)}</p>
-      <p class="small muted">Баталгаажуулснаар азарганы суудал ${b.mares}-ээр хасагдаж, захиалагчид баталгаажуулалтын маягт үүснэ. Утсаар холбогдож баталгаажуулсан уу?</p>
+      <div class="pay-check"><div><span>Төлөх дүн</span><b>${amt == null ? 'Тохиролцоно (Private)' : amt.toLocaleString('en-US') + '₮'}</b></div><div><span>Гүйлгээний утга</span><b class="mono">${esc(b.code)}</b></div><div><span>Захиалагч</span><b>${b.transferClaimedAt ? '💳 Шилжүүлсэн гэж мэдэгдсэн' + (b.payerName ? ' — ' + esc(b.payerName) : '') + '<br><small>' + fmtDate(b.transferClaimedAt) + '</small>' : 'Шилжүүлсэн гэж мэдэгдээгүй байна'}</b></div></div>
+      <p class="small muted">Дансны хуулгад <b>${esc(b.code)}</b> утгатай${amt == null ? '' : ', <b>' + amt.toLocaleString('en-US') + '₮</b>-ийн'} гүйлгээ орсныг шалгасан уу? Баталгаажуулснаар азарганы суудал ${b.mares}-ээр хасагдаж, захиалагчийн хуудсанд баталгаажуулалтын маягт гарна.</p>
       <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-light" id="m-no">Болих</button><button class="btn btn-green" id="m-yes">✓ Баталгаажуулах</button></div>`);
     document.getElementById('m-no').onclick = closeModal;
     document.getElementById('m-yes').onclick = async () => {
@@ -184,10 +189,12 @@ async function action(act, code, b) {
 async function exportCsv() {
   try {
     const list = await listBookings();
-    const rows = [['Код', 'Төлөв', 'Азарга', 'Захиалагч', 'Утас', 'Гүүний тоо', 'Дараалал', 'Гүүний мэдээлэл', 'Байршил', 'Тайлбар', 'Захиалсан', 'Баталгаажсан']];
+    const rows = [['Код', 'Төлөв', 'Азарга', 'Захиалагч', 'Утас', 'Гүүний тоо', 'Дүн (₮)', 'Шилжүүлсэн гэж мэдэгдсэн', 'Дараалал', 'Гүүний мэдээлэл', 'Байршил', 'Тайлбар', 'Захиалсан', 'Баталгаажсан']];
     list.slice().reverse().forEach(b => {
       const st = overview.stallions.find(s => s.slug === b.stallion);
-      rows.push([b.code, statusMn(b.displayStatus), st ? st.name : b.stallion, b.ownerName, b.phone, b.mares,
+      const amt = bookingAmount(b, st);
+      rows.push([b.code, statusMn(b.displayStatus), st ? st.name : b.stallion, b.ownerName, b.phone, b.mares, amt == null ? '' : amt,
+        b.transferClaimedAt ? fmtDate(b.transferClaimedAt) + (b.payerName ? ' ' + b.payerName : '') : '',
         b.queueFrom ? (b.queueFrom === b.queueTo ? b.queueFrom : `${b.queueFrom}-${b.queueTo}`) : '',
         b.mareInfo, b.location, b.note, fmtDate(b.createdAt), fmtDate(b.confirmedAt)]);
     });
@@ -238,6 +245,63 @@ function editStallion(slug) {
   });
 }
 
+// ---------- QR постер (сайтын холбоосын QR — хэвлэж тараана)
+const siteUrl = () => location.origin + location.pathname.replace(/[^/]*$/, '');
+function makeQr(text) { const q = qrcode(0, 'M'); q.addData(text); q.make(); return q; }
+function qrPng(q, px) {
+  const n = q.getModuleCount(), margin = 4, cell = Math.floor(px / (n + margin * 2)), size = cell * (n + margin * 2);
+  const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, size, size); g.fillStyle = '#072a35';
+  for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) g.fillRect((k + margin) * cell, (r + margin) * cell, cell, cell);
+  return c.toDataURL('image/png');
+}
+function download(name, href) { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+async function renderPoster() {
+  const el = document.getElementById('tabc');
+  const c = await getSettings();
+  const link = siteUrl();
+  const shown = link.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  let q;
+  try { q = makeQr(link); } catch (e) { el.innerHTML = `<div class="alert error">QR үүсгэж чадсангүй: ${esc(String(e))}</div>`; return; }
+  const svg = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+  const photos = overview.stallions.filter(s => s.active !== false && s.images && s.images.main).slice(0, 6);
+  el.innerHTML = `
+  <div class="poster-tools no-print">
+    <div class="small muted" style="flex:1 1 100%">Доорх постерыг хэвлэж (эсвэл PDF болгож) ферм, үзэсгэлэн, сурталчилгаанд тараана. QR нь <b class="mono">${esc(shown)}</b> руу хөтөлнө.</div>
+    <label>Хэмжээ <select class="input" id="p-size"><option value="a4">A4</option><option value="a5">A5</option></select></label>
+    <label class="switch" style="font-weight:500"><input type="checkbox" id="p-photos" checked> Азаргануудын зураг</label>
+    <input class="input" id="p-note" placeholder="Нэмэлт мөр (жишээ: Үржүүлгийн улирал 2027 оны хавар)" value="${esc(c.season ? 'Үржүүлгийн улирал: ' + c.season : '')}" style="flex:1 1 260px">
+    <button class="btn btn-green" id="p-print">🖨 Хэвлэх / PDF</button>
+    <button class="btn btn-light" id="p-png">⬇ QR (PNG)</button>
+    <button class="btn btn-light" id="p-svg">⬇ QR (SVG)</button>
+    <button class="btn btn-light" id="p-copy">Холбоос хуулах</button>
+  </div>
+  <div class="poster a4" id="poster">
+    <div class="poster-head"><span class="brand-mark"></span><div><b>${esc(c.siteName || 'Морьтон')}</b><span>${esc(c.siteTagline || 'Адуу үржүүлгийн ферм')}</span></div></div>
+    <h1>Үржүүлгийн азарганд<br>гүү тавих захиалга</h1>
+    <p class="poster-sub" id="p-sub">${esc(c.season ? 'Үржүүлгийн улирал: ' + c.season : '')}</p>
+    <div class="poster-qr">${svg}</div>
+    <div class="poster-scan">📱 QR кодыг уншуулж захиалгаа өгнө үү</div>
+    <div class="poster-url">${esc(shown)}</div>
+    <ol class="poster-steps">
+      <li><b>1</b><span>QR уншуулж сайт руу орно</span></li>
+      <li><b>2</b><span>Азаргаа сонгож гүүгээ бүртгүүлнэ</span></li>
+      <li><b>3</b><span>Захиалгын кодоо бичиж дансаар төлнө</span></li>
+      <li><b>4</b><span>Баталгаажуулалтын маягтаа авна</span></li>
+    </ol>
+    <div class="poster-photos" id="p-photo-row">${photos.map(s => `<figure><img src="${img(s.images.main, true)}" alt=""><figcaption>${esc(s.name)}</figcaption></figure>`).join('')}</div>
+    <div class="poster-foot"><span>☎ ${esc(c.phone || '')}</span><span>${esc(c.address || '')}</span></div>
+  </div>`;
+  const poster = document.getElementById('poster');
+  document.getElementById('p-size').addEventListener('change', e => { poster.classList.toggle('a5', e.target.value === 'a5'); poster.classList.toggle('a4', e.target.value === 'a4'); });
+  document.getElementById('p-photos').addEventListener('change', e => { document.getElementById('p-photo-row').style.display = e.target.checked ? '' : 'none'; });
+  document.getElementById('p-note').addEventListener('input', e => { document.getElementById('p-sub').textContent = e.target.value; });
+  document.getElementById('p-print').addEventListener('click', () => window.print());
+  document.getElementById('p-png').addEventListener('click', () => download('moriton-qr.png', qrPng(q, 1200)));
+  document.getElementById('p-svg').addEventListener('click', () => download('moriton-qr.svg', 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<?xml version="1.0" encoding="UTF-8"?>' + q.createSvgTag({ cellSize: 8, margin: 4, scalable: true }))));
+  document.getElementById('p-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(link); toast('Холбоос хуулагдлаа'); } catch (e) { toast(link); } });
+}
+
 // ---------- settings
 async function renderSettings() {
   const el = document.getElementById('tabc');
@@ -247,6 +311,9 @@ async function renderSettings() {
     <div class="row">${f('siteName', 'Сайтын нэр')}${f('siteTagline', 'Уриа (толгойд)')}</div>
     <div class="row">${f('orgName', 'Байгууллагын нэр (маягт дээр)')}${f('phone', 'Утас')}</div>
     <div class="row">${f('address', 'Хаяг')}${f('season', 'Үржүүлгийн улирал')}</div>
+    <h4 style="margin:6px 0 0">💳 Дансны мэдээлэл (захиалагчид төлбөрийн хэсэгт харагдана)</h4>
+    <div class="row">${f('bankName', 'Банк (жишээ: Хаан банк)')}${f('bankAccount', 'Дансны дугаар')}</div>
+    <div class="row">${f('bankHolder', 'Хүлээн авагч (дансны нэр)')}${f('bankIban', 'IBAN (заавал биш)')}</div>
     <div class="row">${f('confirmPhone', 'Баталгаажуулах утас (24 цагийн анхааруулгад)')}${f('notifyEmail', 'Шинэ захиалгын мэдэгдэл очих имэйл', 'email')}</div>
     <div><button class="btn btn-light btn-sm" type="button" id="test-mail">✉ Туршилтын имэйл илгээх</button> <span class="hint">Эхний удаа FormSubmit тухайн хаяг руу «Activate» захидал илгээнэ — түүнийг баталгаажуулсны дараа мэдэгдэл ирж эхэлнэ.</span></div>
     <div class="row">${f('defaultCapacity', 'Анхдагч багтаамж (шинэ азаргад)', 'number')}${f('maxMaresPerBooking', 'Нэг захиалгын дээд гүүний тоо (1–5)', 'number')}</div>
